@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "scout",
+      "runtimeExecutable": "/Users/om/.local/bin/node",
+      "runtimeArgs": ["/Users/om/Desktop/SCOUT/node_modules/vite/bin/vite.js", "--port", "5174"],
+      "cwd": "/Users/om/Desktop/SCOUT",
+      "port": 5174
+    }
+  ]
+}
