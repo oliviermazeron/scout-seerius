@@ -24,6 +24,7 @@ try {
 
 // ── Importe les handlers API ───────────────────────────────────────────────
 const { default: hubspotHandler } = await import('./api/hubspot.js')
+const { default: hunterHandler  } = await import('./api/hunter.js')
 
 // ── Serveur HTTP minimal ───────────────────────────────────────────────────
 const server = createServer(async (req, res) => {
@@ -62,9 +63,8 @@ const server = createServer(async (req, res) => {
     end() { res.writeHead(this._status, this._headers); res.end() },
   }
 
-  if (url.pathname === '/api/hubspot') {
-    return hubspotHandler(reqAdapter, resAdapter)
-  }
+  if (url.pathname === '/api/hubspot') return hubspotHandler(reqAdapter, resAdapter)
+  if (url.pathname === '/api/hunter')  return hunterHandler(reqAdapter, resAdapter)
 
   res.writeHead(404).end('Not found')
 })
