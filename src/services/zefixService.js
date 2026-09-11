@@ -10,7 +10,9 @@
 //      La stratégie est : recherche par mots-clés sectoriels + filtrage post-query
 //      sur le nom de la société (mots indicateurs de l'activité).
 
-const BASE = import.meta.env.DEV ? '/zefix' : '/api/zefix';
+const BASE = '/zefix'; // dev: proxy Vite → zefix.admin.ch
+const API_ZEFIX = '/api/zefix'; // prod: Vercel serverless
+const IS_DEV = import.meta.env.DEV;
 
 // ─── Formes juridiques (identiques à SwissDealScout) ─────────────────────────
 export const LEGAL_FORMS = {
@@ -111,10 +113,14 @@ async function post(path, body) {
   const controller = new AbortController();
   const tid = setTimeout(() => controller.abort(), 12000);
   try {
-    const res = await fetch(`${BASE}${path}`, {
+    // En dev : proxy Vite /zefix → zefix.admin.ch (via vite.config.js)
+    // En prod : POST /api/zefix avec { path, ...body } → serverless Vercel
+    const url = IS_DEV ? `${BASE}${path}` : API_ZEFIX;
+    const payload = IS_DEV ? body : { path, ...body };
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
     clearTimeout(tid);
