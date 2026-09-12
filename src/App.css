@@ -28,9 +28,9 @@
   gap: 16px;
   flex-shrink: 0;
 }
-.header-logo {
-  display: flex;
-  align-items: center;
+.header-logo-img {
+  height: 22px;
+  width: auto;
   opacity: 0.95;
 }
 .header-divider {
