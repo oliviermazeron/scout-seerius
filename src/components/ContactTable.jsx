@@ -1,6 +1,95 @@
 import { useState } from 'react'
 import './ContactTable.css'
 
+// ─── Ligne enrichissement LinkedIn (NinjaPear) ────────────────────────────────
+function LinkedInRow({ domain, segment, companyName }) {
+  const [status, setStatus]   = useState('idle') // idle | loading | done | error
+  const [employees, setEmployees] = useState([])
+  const [pushStates, setPushStates] = useState({})
+
+  async function handleSearch() {
+    if (!domain) return
+    setStatus('loading')
+    try {
+      const res = await fetch('/api/proxycurl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      setEmployees(data.employees ?? [])
+      setStatus('done')
+    } catch (err) {
+      console.error(err)
+      setStatus('error')
+    }
+  }
+
+  async function pushEmployee(emp) {
+    const emailKey = `${emp.firstName}|${emp.lastName}`
+    setPushStates((s) => ({ ...s, [emailKey]: 'loading' }))
+    try {
+      const res = await fetch('/api/hubspot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: companyName,
+          domain,
+          segment,
+          _contact: {
+            firstname: emp.firstName ?? '',
+            lastname:  emp.lastName ?? '',
+            jobtitle:  emp.role ?? '',
+            company:   companyName,
+          },
+        }),
+      })
+      if (!res.ok) throw new Error()
+      setPushStates((s) => ({ ...s, [emailKey]: 'done' }))
+    } catch {
+      setPushStates((s) => ({ ...s, [emailKey]: 'error' }))
+    }
+  }
+
+  if (!domain) return <span className="no-domain">Domaine inconnu</span>
+  if (status === 'idle')    return <button className="btn-enrich btn-linkedin" onClick={handleSearch}>🔗 LinkedIn</button>
+  if (status === 'loading') return <span className="enrich-status">Recherche LinkedIn…</span>
+  if (status === 'error')   return <span className="badge badge--red">Erreur NinjaPear</span>
+  if (employees.length === 0) return <span className="enrich-status">Aucun décideur trouvé pour {domain}</span>
+
+  return (
+    <div className="contacts-list">
+      <div className="contacts-list-header">
+        {employees.length} décideur{employees.length > 1 ? 's' : ''} trouvé{employees.length > 1 ? 's' : ''} via LinkedIn
+      </div>
+      {employees.map((e) => {
+        const key = `${e.firstName}|${e.lastName}`
+        return (
+          <div key={key} className="contact-row">
+            <div className="contact-info">
+              <span className="contact-name">{e.firstName} {e.lastName}</span>
+              {e.role && <span className="contact-pos">{e.role}</span>}
+              {e.profileUrl && (
+                <a href={e.profileUrl} target="_blank" rel="noreferrer" className="contact-email">
+                  🔗 LinkedIn
+                </a>
+              )}
+            </div>
+            <button
+              className={`btn-push-contact ${pushStates[key] === 'done' ? 'btn-push-contact--done' : ''}`}
+              onClick={() => pushEmployee(e)}
+              disabled={!!pushStates[key]}
+            >
+              {pushStates[key] === 'loading' ? '…' : pushStates[key] === 'done' ? '✓' : pushStates[key] === 'error' ? '!' : '→ HS'}
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Ligne d'enrichissement Hunter.io ────────────────────────────────────────
 function EnrichRow({ domain, segment, companyName }) {
   const [status, setStatus] = useState('idle')  // idle | loading | done | error
@@ -187,7 +276,8 @@ export default function ContactTable({ companies, segment }) {
             <th>Forme</th>
             <th>Canton</th>
             <th>Statut</th>
-            <th>Enrichir (Hunter)</th>
+            <th>Emails (Hunter)</th>
+            <th>Décideurs (LinkedIn)</th>
             <th>Company →HS</th>
           </tr>
         </thead>
@@ -222,19 +312,35 @@ export default function ContactTable({ companies, segment }) {
                   </td>
                   <td>
                     <button
-                      className={`btn-expand ${isExpanded ? 'btn-expand--open' : ''}`}
-                      onClick={() => toggleExpand(key)}
-                      title={isExpanded ? 'Masquer' : 'Voir les contacts'}
+                      className={`btn-expand ${isExpanded === 'hunter' ? 'btn-expand--open' : ''}`}
+                      onClick={() => setExpanded((prev) => { const n = new Set(prev); const k2 = `${key}:hunter`; n.has(k2) ? n.delete(k2) : n.add(k2); return n })}
+                      title="Emails via Hunter.io"
                     >
-                      {isExpanded ? '▲ Masquer' : '▼ Contacts'}
+                      {expanded.has(`${key}:hunter`) ? '▲ Emails' : '▼ Emails'}
+                    </button>
+                  </td>
+                  <td>
+                    <button
+                      className={`btn-expand ${expanded.has(`${key}:linkedin`) ? 'btn-expand--open' : ''}`}
+                      onClick={() => setExpanded((prev) => { const n = new Set(prev); const k2 = `${key}:linkedin`; n.has(k2) ? n.delete(k2) : n.add(k2); return n })}
+                      title="Décideurs via LinkedIn"
+                    >
+                      {expanded.has(`${key}:linkedin`) ? '▲ LinkedIn' : '🔗 LinkedIn'}
                     </button>
                   </td>
                   <td><HubSpotButton company={c} segment={segment} /></td>
                 </tr>
-                {isExpanded && (
+                {expanded.has(`${key}:hunter`) && (
                   <tr key={`${key}-enrich`} className="enrich-row">
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       <EnrichRow key={`${key}-enrich`} domain={domain} segment={segment} companyName={c.name} />
+                    </td>
+                  </tr>
+                )}
+                {expanded.has(`${key}:linkedin`) && (
+                  <tr key={`${key}-linkedin`} className="enrich-row">
+                    <td colSpan={8}>
+                      <LinkedInRow key={`${key}-linkedin`} domain={domain} segment={segment} companyName={c.name} />
                     </td>
                   </tr>
                 )}
