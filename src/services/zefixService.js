@@ -194,24 +194,46 @@ async function post(path, body) {
 // segment : 'fiduciaire' | 'avocat' | 'banque_cantonale' | 'banque_affaires'
 // cantons : ['VD', 'GE', ...] — filtre optionnel
 
-export async function searchIntermediaries({ segment, cantons = [], limit = 30 }) {
+// ─── Fetch paginé ZEFIX pour un mot-clé ──────────────────────────────────────
+// Récupère TOUS les résultats en itérant sur les offsets jusqu'à hasMoreResults=false
+// ou jusqu'à MAX_PAGES pages (sécurité anti-boucle infinie).
+const PAGE_SIZE  = 200; // max accepté par ZEFIX
+const MAX_PAGES  = 10;  // = 2 000 résultats max par mot-clé
+
+async function fetchAllForKeyword(kw) {
+  const companies = [];
+  let offset = 0;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    try {
+      const data = await post('/firm/search.json', {
+        name: kw,
+        maxEntries: PAGE_SIZE,
+        offset,
+        activeOnly: true,
+      });
+      const list = data.list ?? [];
+      companies.push(...list.map(normalizeCompany));
+      if (!data.hasMoreResults || list.length < PAGE_SIZE) break;
+      offset += PAGE_SIZE;
+    } catch {
+      break; // mot-clé en erreur → on passe au suivant
+    }
+  }
+
+  return companies;
+}
+
+export async function searchIntermediaries({ segment, cantons = [], limit = 500 }) {
   const keywords = SEGMENT_KEYWORDS[segment] ?? [];
   if (!keywords.length) throw new Error(`Segment inconnu : ${segment}`);
 
   let allCompanies = [];
 
-  // On lance une recherche ZEFIX par mot-clé pour chaque terme du segment
+  // Pagination complète pour chaque mot-clé
   for (const kw of keywords) {
-    try {
-      const data = await post('/firm/search.json', {
-        name: kw,
-        maxEntries: 200,
-        activeOnly: true,
-      });
-      allCompanies.push(...(data.list ?? []).map(normalizeCompany));
-    } catch {
-      // On continue si un mot-clé échoue
-    }
+    const results = await fetchAllForKeyword(kw);
+    allCompanies.push(...results);
   }
 
   // Dédoublonner par UID
