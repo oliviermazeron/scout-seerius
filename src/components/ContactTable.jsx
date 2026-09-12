@@ -356,6 +356,52 @@ export default function ContactTable({ companies, segment }) {
     URL.revokeObjectURL(url)
   }
 
+  const [enriching, setEnriching] = useState(false)
+  const [enrichProgress, setEnrichProgress] = useState({ done: 0, total: 0 })
+
+  async function enrichSelected() {
+    const targets = companies.filter((c) => selected.has(c.uid || c.name))
+    setEnriching(true)
+    setEnrichProgress({ done: 0, total: targets.length })
+
+    await Promise.allSettled(targets.map(async (c) => {
+      const key = c.uid || c.name
+      const canton = zefixData[key]?.canton ?? c.canton
+
+      // 1. ZEFIX lookup si pas encore enrichi
+      if (!zefixData[key] && (c.legalForm === '—' || !c.legalForm)) {
+        try {
+          const r = await fetch('/api/zefix-lookup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: c.name, canton }),
+          })
+          const d = await r.json()
+          if (d.found) handleZefixFound(key, d)
+        } catch {}
+      }
+
+      // 2. Brave Search si pas de domaine
+      const hasDomain = foundDomains[key] || c.website
+      if (!hasDomain) {
+        try {
+          const r = await fetch('/api/brave', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: c.name, canton }),
+          })
+          const d = await r.json()
+          if (d.domain) handleDomainFound(key, d.domain)
+        } catch {}
+      }
+
+      setEnrichProgress((p) => ({ ...p, done: p.done + 1 }))
+    }))
+
+    setEnriching(false)
+    setEnrichProgress({ done: 0, total: 0 })
+  }
+
   async function pushSelected() {
     setPushingAll(true)
     const targets = companies.filter((c) => selected.has(c.uid || c.name))
@@ -386,8 +432,13 @@ export default function ContactTable({ companies, segment }) {
       {selected.size > 0 && (
         <div className="bulk-bar">
           <span>{selected.size} sélectionné{selected.size > 1 ? 's' : ''}</span>
-          <button className="btn-bulk-push" onClick={pushSelected} disabled={pushingAll}>
-            {pushingAll ? 'Envoi…' : `Push ${selected.size} vers HubSpot`}
+          <button className="btn-bulk-enrich" onClick={enrichSelected} disabled={enriching || pushingAll}>
+            {enriching
+              ? `⚡ ${enrichProgress.done}/${enrichProgress.total}…`
+              : `⚡ Enrichir (${selected.size})`}
+          </button>
+          <button className="btn-bulk-push" onClick={pushSelected} disabled={pushingAll || enriching}>
+            {pushingAll ? 'Envoi…' : `→ HS (${selected.size})`}
           </button>
         </div>
       )}
