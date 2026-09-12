@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import './App.css'
 import SegmentPanel from './components/SegmentPanel.jsx'
+import SynthesisPanel from './components/SynthesisPanel.jsx'
 
 // source: 'zefix' | 'static' | 'brave'
 const SEGMENTS = [
@@ -69,10 +70,13 @@ const SEGMENTS = [
   },
 ]
 
+const SYNTHESIS_ID = '__synthesis__'
+
 export default function App() {
-  const [activeSegment, setActiveSegment] = useState(SEGMENTS[0].id)
+  const [activeSegment, setActiveSegment] = useState(SYNTHESIS_ID)
 
   const segment = SEGMENTS.find((s) => s.id === activeSegment)
+  const isSynthesis = activeSegment === SYNTHESIS_ID
 
   return (
     <div className="app">
@@ -93,6 +97,14 @@ export default function App() {
       </header>
 
       <nav className="tabs">
+        <button
+          className={`tab tab--synthesis ${isSynthesis ? 'tab--active' : ''}`}
+          onClick={() => setActiveSegment(SYNTHESIS_ID)}
+        >
+          <span>📊</span>
+          <span>Synthèse</span>
+        </button>
+        <div className="tabs-divider" />
         {SEGMENTS.map((s) => (
           <button
             key={s.id}
@@ -106,7 +118,10 @@ export default function App() {
       </nav>
 
       <main className="main">
-        <SegmentPanel segment={segment} />
+        {isSynthesis
+          ? <SynthesisPanel onNavigate={(id) => setActiveSegment(id)} />
+          : <SegmentPanel segment={segment} />
+        }
       </main>
     </div>
   )

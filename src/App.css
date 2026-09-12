@@ -96,6 +96,17 @@
   border-bottom-color: #c9a266;
   font-weight: 600;
 }
+.tab--synthesis {
+  font-weight: 600;
+  color: var(--accent);
+}
+.tab--synthesis.tab--active { border-bottom-color: var(--accent); }
+.tabs-divider {
+  width: 1px;
+  background: var(--border);
+  margin: 8px 4px;
+  flex-shrink: 0;
+}
 
 /* ── Main ── */
 .main {

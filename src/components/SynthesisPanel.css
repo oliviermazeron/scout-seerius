@@ -1,0 +1,148 @@
+.synthesis {
+  padding: 24px 0;
+}
+
+.synthesis-header {
+  margin-bottom: 24px;
+}
+.synthesis-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+.synthesis-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ── KPIs ── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kpi-card--gold {
+  border-color: var(--gold);
+  background: var(--gold-light);
+}
+.kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+.kpi-card--gold .kpi-value { color: #8a6a2a; }
+.kpi-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* ── Tableau ── */
+.synthesis-table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.synthesis-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.synthesis-table th {
+  background: var(--bg);
+  text-align: left;
+  padding: 10px 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.synthesis-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.synthesis-table tbody tr:last-child td { border-bottom: none; }
+.synthesis-table tbody tr:hover:not(.row--empty) { background: var(--bg); }
+.row--empty { opacity: .5; }
+
+.seg-icon { margin-right: 8px; font-size: 16px; }
+.seg-label { font-weight: 500; }
+.cell-center { text-align: center; }
+.base-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.text-muted { color: var(--text-muted); font-size: 12px; }
+.linkedin-count { font-size: 13px; font-weight: 500; color: var(--accent); }
+
+/* ── Barre de progression ── */
+.stat-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stat-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 120px;
+}
+.stat-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width .3s;
+  min-width: 4px;
+}
+.stat-bar-label {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+/* ── Bouton ── */
+.btn-goto {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s;
+}
+.btn-goto:hover {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── État vide ── */
+.synthesis-empty {
+  margin-top: 24px;
+  padding: 20px;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
