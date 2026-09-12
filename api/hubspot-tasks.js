@@ -1,54 +1,46 @@
 // ─── Création de tâches HubSpot (email à envoyer) ────────────────────────────
 // POST /api/hubspot-tasks
-// Body: { tasks: [{ companyName, contactName, contactRole, template, companyId? }] }
+// Body: { tasks: [{ companyName, contactName, template, companyId?, contactId? }] }
 //
-// Crée une tâche de type EMAIL pour chaque contact dans HubSpot.
-// La tâche contient le template pré-rempli dans hs_task_body.
-//
-// Scopes requis : crm.objects.tasks.write
+// Utilise l'API Engagements v1 (legacy) — compatible avec les tokens pat-eu1-*
+// sans scope tasks supplémentaire.
 
-const HS = 'https://api.hubapi.com/crm/v3'
+const HS_ENGAGE = 'https://api.hubapi.com/engagements/v1/engagements'
 
-async function createTask(token, { companyName, contactName, contactRole, template, companyId, contactId }) {
-  const subject = `📧 Email à envoyer — ${companyName}${contactName ? ' · ' + contactName : ''}`
-  const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString() // +2 jours
+async function createTask(token, { companyName, contactName, template, companyId, contactId }) {
+  const subject = `📧 Email — ${companyName}${contactName ? ' · ' + contactName : ''}`
+  const dueDate = Date.now() + 2 * 24 * 60 * 60 * 1000 // +2 jours en ms
 
-  const properties = {
-    hs_task_subject:    subject,
-    hs_task_body:       template,
-    hs_task_status:     'NOT_STARTED',
-    hs_task_type:       'EMAIL',
-    hs_timestamp:       dueDate,
-    hs_task_priority:   'MEDIUM',
+  const body = {
+    engagement: {
+      active:    true,
+      type:      'TASK',
+      timestamp: dueDate,
+    },
+    associations: {
+      companyIds: companyId ? [Number(companyId)] : [],
+      contactIds: contactId ? [Number(contactId)] : [],
+      dealIds:    [],
+      ownerIds:   [],
+      ticketIds:  [],
+    },
+    metadata: {
+      subject,
+      body:     template,
+      status:   'NOT_STARTED',
+      taskType: 'EMAIL',
+      priority: 'MEDIUM',
+    },
   }
 
-  const r = await fetch(`${HS}/objects/tasks`, {
+  const r = await fetch(HS_ENGAGE, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ properties }),
+    body: JSON.stringify(body),
   })
   const data = await r.json()
-  if (!r.ok) return { ok: false, error: data?.message ?? r.status }
-
-  const taskId = data.id
-
-  // Associer à la company si on a l'ID
-  if (taskId && companyId) {
-    await fetch(`${HS}/objects/tasks/${taskId}/associations/companies/${companyId}/task_to_company`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    })
-  }
-
-  // Associer au contact si on a l'ID
-  if (taskId && contactId) {
-    await fetch(`${HS}/objects/tasks/${taskId}/associations/contacts/${contactId}/task_to_contact`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    })
-  }
-
-  return { ok: true, taskId }
+  if (!r.ok) return { ok: false, error: data?.message ?? r.status, status: r.status }
+  return { ok: true, taskId: data?.engagement?.id }
 }
 
 export default async function handler(req, res) {
