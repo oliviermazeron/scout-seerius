@@ -46,9 +46,10 @@ export const SEGMENT_KEYWORDS = {
     'office notarial', 'étude notariale',
   ],
   conseil_fiscal: [
-    'conseil fiscal', 'conseiller fiscal', 'steuerberatung', 'steuerberater',
-    'tax advisory', 'tax consulting', 'tax counsel',
-    'fiscalité', 'tax', 'impôts',
+    'tax', 'fiscal', 'steuerberatung', 'steuerberater',
+    'conseil fiscal', 'conseiller fiscal',
+    'tax advisory', 'tax consulting', 'tax & legal',
+    'fiscalité', 'impôts', 'fiscalis',
   ],
   banque_cantonale: [
     'banque cantonale', 'kantonalbank',
@@ -204,7 +205,7 @@ export async function searchIntermediaries({ segment, cantons = [], limit = 30 }
     try {
       const data = await post('/firm/search.json', {
         name: kw,
-        maxEntries: 50,
+        maxEntries: 200,
         activeOnly: true,
       });
       allCompanies.push(...(data.list ?? []).map(normalizeCompany));

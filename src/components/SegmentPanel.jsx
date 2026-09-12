@@ -46,7 +46,7 @@ export default function SegmentPanel({ segment }) {
       } else if (segment.source === 'finma') {
         data = searchFinmaGFI({ cantons, segment: segment.id })
       } else {
-        data = await searchIntermediaries({ segment: segment.id, cantons, limit: 50 })
+        data = await searchIntermediaries({ segment: segment.id, cantons, limit: 500 })
       }
       setResults(data)
     } catch (err) {
