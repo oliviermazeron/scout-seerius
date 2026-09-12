@@ -43,8 +43,8 @@ const SEGMENTS = [
     id: 'gestionnaire_fortune',
     label: 'Gestionnaires de fortune',
     icon: '📈',
-    source: 'zefix',
-    description: 'Gérants de fortune indépendants (GFI) et gérants de patrimoine suisses licenciés FINMA',
+    source: 'finma',
+    description: 'Gestionnaires de fortune et trustees licenciés FINMA — registre officiel (1 508 entités)',
   },
   {
     id: 'family_office',

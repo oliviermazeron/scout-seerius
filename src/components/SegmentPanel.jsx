@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { searchIntermediaries } from '../services/zefixService.js'
 import { searchByBrave } from '../services/braveSegmentService.js'
 import { getBanquesCantonales } from '../services/banquesCantonales.js'
+import { searchFinmaGFI } from '../services/finmaService.js'
 import ContactTable from './ContactTable.jsx'
 import './SegmentPanel.css'
 
@@ -16,6 +17,7 @@ const SOURCE_BADGE = {
   static: null,
   zefix:  { label: 'ZEFIX',        color: '#1a3a5c' },
   brave:  { label: 'Brave Search', color: '#8B4F1A' },
+  finma:  { label: 'FINMA',        color: '#8B1A1A' },
 }
 
 export default function SegmentPanel({ segment }) {
@@ -41,6 +43,8 @@ export default function SegmentPanel({ segment }) {
         data = getBanquesCantonales({ cantons })
       } else if (segment.source === 'brave') {
         data = await searchByBrave({ category: segment.id, cantons })
+      } else if (segment.source === 'finma') {
+        data = searchFinmaGFI({ cantons, limit: 100 })
       } else {
         data = await searchIntermediaries({ segment: segment.id, cantons, limit: 50 })
       }
@@ -61,6 +65,8 @@ export default function SegmentPanel({ segment }) {
     ? '🏦 Afficher les banques cantonales'
     : segment.source === 'brave'
     ? '🌐 Lancer la recherche'
+    : segment.source === 'finma'
+    ? '📋 Charger le registre FINMA'
     : '🔍 Lancer la recherche'
 
   return (
