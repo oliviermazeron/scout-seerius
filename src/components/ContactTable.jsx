@@ -269,7 +269,7 @@ function EnrichRow({ domain, segment, companyName }) {
     }
   }
 
-  if (!domain) return <span className="no-domain">Domaine inconnu</span>
+  if (!domain) return <span className="no-domain" title="Cliquez sur 🌐 à côté du nom de la société pour trouver le domaine, puis revenez ici">🌐 Trouvez d'abord le domaine via le bouton 🌐</span>
   if (status === 'idle')    return <button className="btn-enrich" onClick={handleEnrich}>🔍 Enrichir</button>
   if (status === 'loading') return <span className="enrich-status">Recherche…</span>
   if (status === 'error')   return <span className="badge badge--red">Erreur Hunter</span>
