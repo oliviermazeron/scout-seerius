@@ -3,22 +3,34 @@ import './DealPanel.css'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const DEAL_TYPES = [
-  { id: 'cession',      label: 'Cession',      icon: '📤', desc: 'Cédant cherche repreneur / acheteur' },
-  { id: 'acquisition',  label: 'Acquisition',  icon: '📥', desc: 'Acquéreur cherche une cible' },
-  { id: 'levee',        label: 'Levée',         icon: '🚀', desc: 'Entreprise cherche des investisseurs' },
+  // M&A
+  { id: 'cession',       label: 'Cession',          icon: '📤', desc: 'Cédant cherche repreneur / acheteur',       group: 'M&A' },
+  { id: 'acquisition',   label: 'Acquisition',       icon: '📥', desc: 'Acquéreur cherche une cible',              group: 'M&A' },
+  { id: 'levee',         label: 'Levée de fonds',    icon: '🚀', desc: 'Entreprise cherche des investisseurs',      group: 'M&A' },
+  // Private Markets
+  { id: 'secondaire_pe', label: 'Secondaire PE',     icon: '🔄', desc: 'Parts de fonds PE à céder ou acquérir',    group: 'Private Markets' },
+  { id: 'co_invest',     label: 'Co-investissement', icon: '🤝', desc: 'Opportunité de co-invest dans une société', group: 'Private Markets' },
+  { id: 'dette_privee',  label: 'Dette privée',      icon: '📜', desc: 'Financement alternatif / private debt',    group: 'Private Markets' },
+  { id: 'real_assets',   label: 'Real Assets',       icon: '🏢', desc: 'Infrastructure, immobilier, actifs réels', group: 'Private Markets' },
 ]
+
+const DEAL_GROUPS = ['M&A', 'Private Markets']
 
 const SECTEURS = [
   'Industrie & manufacturing', 'Tech & SaaS', 'Santé & medtech',
   'Immobilier & construction', 'Services aux entreprises', 'Commerce & retail',
-  'Agroalimentaire', 'Finance & assurance', 'Autre',
+  'Agroalimentaire', 'Finance & assurance', 'Énergie & cleantech', 'Autre',
 ]
 
-// Segments pertinents par type de deal
+// Segments pertinents par type de deal — ordre = priorité
 const MATCH_BY_TYPE = {
-  cession: ['fiduciaire', 'avocat', 'notaire', 'conseil_fiscal', 'banque_privee', 'gestionnaire_fortune', 'banque_affaires', 'asset_manager', 'family_office'],
-  acquisition: ['banque_affaires', 'avocat', 'fiduciaire', 'conseil_fiscal', 'family_office', 'multi_family_office', 'asset_manager'],
-  levee: ['banque_affaires', 'asset_manager', 'family_office', 'multi_family_office', 'banque_privee'],
+  cession:       ['fiduciaire', 'avocat', 'notaire', 'conseil_fiscal', 'banque_privee', 'gestionnaire_fortune', 'banque_affaires', 'asset_manager', 'family_office'],
+  acquisition:   ['banque_affaires', 'avocat', 'fiduciaire', 'conseil_fiscal', 'family_office', 'multi_family_office', 'asset_manager'],
+  levee:         ['banque_affaires', 'asset_manager', 'family_office', 'multi_family_office', 'banque_privee'],
+  secondaire_pe: ['banque_privee', 'family_office', 'multi_family_office', 'gestionnaire_fortune', 'asset_manager', 'banque_affaires'],
+  co_invest:     ['family_office', 'multi_family_office', 'banque_privee', 'gestionnaire_fortune', 'asset_manager'],
+  dette_privee:  ['asset_manager', 'banque_privee', 'gestionnaire_fortune', 'family_office', 'multi_family_office', 'banque_affaires'],
+  real_assets:   ['banque_privee', 'family_office', 'multi_family_office', 'gestionnaire_fortune', 'asset_manager'],
 }
 
 const SEGMENT_LABELS = {
@@ -106,19 +118,24 @@ function DealForm({ initial, onSave, onCancel }) {
 
       <div className="deal-form-row">
         <label>Type</label>
-        <div className="type-grid">
-          {DEAL_TYPES.map((t) => (
-            <button
-              key={t.id}
-              className={`type-btn ${deal.type === t.id ? 'type-btn--on' : ''}`}
-              onClick={() => set('type', t.id)}
-            >
-              <span className="type-icon">{t.icon}</span>
-              <span className="type-label">{t.label}</span>
-              <span className="type-desc">{t.desc}</span>
-            </button>
-          ))}
-        </div>
+        {DEAL_GROUPS.map((group) => (
+          <div key={group} className="type-group">
+            <div className="type-group-label">{group}</div>
+            <div className="type-grid">
+              {DEAL_TYPES.filter((t) => t.group === group).map((t) => (
+                <button
+                  key={t.id}
+                  className={`type-btn ${deal.type === t.id ? 'type-btn--on' : ''}`}
+                  onClick={() => set('type', t.id)}
+                >
+                  <span className="type-icon">{t.icon}</span>
+                  <span className="type-label">{t.label}</span>
+                  <span className="type-desc">{t.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="deal-form-row">
@@ -195,19 +212,40 @@ function DealMatch({ deal, onNavigate }) {
   }, [deal])
 
   function teaserEmail(seg) {
-    const typeLabel = DEAL_TYPES.find((t) => t.id === deal.type)?.label ?? deal.type
-    const cantons = deal.cantons.length ? deal.cantons.join(', ') : 'Suisse'
-    const ca = deal.caMin || deal.caMax ? `CA ${deal.caMin ? deal.caMin + 'M' : ''}${deal.caMax ? '–' + deal.caMax + 'M' : ''} CHF` : ''
-    const ebitda = deal.ebitdaMin || deal.ebitdaMax ? `, EBITDA ${deal.ebitdaMin ? deal.ebitdaMin + 'M' : ''}${deal.ebitdaMax ? '–' + deal.ebitdaMax + 'M' : ''} CHF` : ''
-    return `Objet : Opportunité confidentielle — ${typeLabel} · ${deal.secteur || 'PME suisse'}
+    const typeInfo  = DEAL_TYPES.find((t) => t.id === deal.type)
+    const typeLabel = typeInfo?.label ?? deal.type
+    const cantons   = deal.cantons.length ? deal.cantons.join(', ') : 'Suisse'
+    const ca        = deal.caMin || deal.caMax ? `${deal.caMin ? deal.caMin + 'M' : ''}${deal.caMax ? '–' + deal.caMax + 'M' : ''} MCHF` : ''
+    const ebitda    = deal.ebitdaMin || deal.ebitdaMax ? `EBITDA ${deal.ebitdaMin ? deal.ebitdaMin + 'M' : ''}${deal.ebitdaMax ? '–' + deal.ebitdaMax + 'M' : ''} MCHF` : ''
+    const sizes     = [ca, ebitda].filter(Boolean).join(' · ')
+
+    // Intros et cibles adaptées par type
+    const intros = {
+      cession:       `Seerius dispose d'un mandat de cession dans le secteur ${deal.secteur || 'non divulgué'}, localisé en ${cantons}.`,
+      acquisition:   `Seerius accompagne un acquéreur cherchant une cible dans le secteur ${deal.secteur || 'non divulgué'}, en ${cantons}.`,
+      levee:         `Seerius accompagne une levée de fonds dans le secteur ${deal.secteur || 'non divulgué'}, en ${cantons}.`,
+      secondaire_pe: `Seerius propose une opportunité de secondaire en private equity — parts de fonds ou position directe dans une société, en ${cantons}.`,
+      co_invest:     `Seerius propose une opportunité de co-investissement dans une société en ${cantons}. Ticket d'entrée accessible, aux côtés d'un investisseur de référence.`,
+      dette_privee:  `Seerius structure une opération de dette privée / financement alternatif en ${cantons}, dans le secteur ${deal.secteur || 'non divulgué'}.`,
+      real_assets:   `Seerius propose une opportunité en real assets (${deal.secteur || 'infrastructure / immobilier'}) en ${cantons}.`,
+    }
+    const cibles = {
+      cession:       'repreneurs ou investisseurs potentiels',
+      acquisition:   'cibles potentielles à céder',
+      levee:         'investisseurs souhaitant participer',
+      secondaire_pe: 'investisseurs en private equity secondaire',
+      co_invest:     'co-investisseurs potentiels',
+      dette_privee:  'prêteurs alternatifs ou investisseurs en dette',
+      real_assets:   'investisseurs en actifs réels',
+    }
+
+    return `Objet : Opportunité confidentielle — ${typeLabel}${deal.secteur ? ' · ' + deal.secteur : ''}
 
 Madame, Monsieur,
 
-Seerius accompagne actuellement un ${typeLabel.toLowerCase()} dans le secteur ${deal.secteur || 'non divulgué'}, localisé en ${cantons}.
-
-Caractéristiques indicatives : ${ca}${ebitda}.
-
-${deal.note ? deal.note + '\n\n' : ''}En tant que ${seg.label.toLowerCase()}, vous pourriez être en contact avec des ${deal.type === 'cession' ? 'repreneurs potentiels' : deal.type === 'acquisition' ? 'cibles potentielles' : 'investisseurs'} correspondant à ce profil.
+${intros[deal.type] ?? intros.cession}
+${sizes ? '\nCaractéristiques indicatives : ' + sizes + '.\n' : ''}
+${deal.note ? '"' + deal.note + '"\n\n' : ''}En tant que ${seg.label.toLowerCase()}, vous pourriez être en contact avec des ${cibles[deal.type] ?? 'contreparties'} correspondant à ce profil.
 
 Seriez-vous disponible pour un échange confidentiel de 20 minutes ?
 

@@ -67,7 +67,16 @@
 .range-inputs { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
 
 /* Types */
-.type-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+.type-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.type-group:last-child { margin-bottom: 0; }
+.type-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-muted);
+}
+.type-grid { display: flex; gap: 8px; flex-wrap: wrap; }
 .type-btn {
   display: flex;
   flex-direction: column;
