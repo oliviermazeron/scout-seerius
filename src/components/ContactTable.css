@@ -5,6 +5,65 @@
   overflow: hidden;
 }
 
+/* ── Score de pertinence ── */
+.score-dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.score-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* ── Filtres internes ── */
+.table-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-wrap: wrap;
+}
+.filter-input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 10px;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+  width: 180px;
+}
+.filter-input:focus { outline: 1px solid var(--gold); }
+.filter-select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 8px;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.filter-select:focus { outline: 1px solid var(--gold); }
+.btn-clear-filters {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.btn-clear-filters:hover { background: var(--bg-hover); }
+.filter-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* ── Barre export ── */
 .table-actions {
   display: flex;
