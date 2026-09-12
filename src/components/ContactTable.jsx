@@ -1,6 +1,36 @@
 import { useState, useCallback } from 'react'
 import './ContactTable.css'
 
+// ─── Bouton lookup ZEFIX (enrichissement UID + forme jur.) ───────────────────
+function ZefixLookupBtn({ company, onFound }) {
+  const [status, setStatus] = useState('idle')
+
+  async function handleLookup() {
+    setStatus('loading')
+    try {
+      const res = await fetch('/api/zefix-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: company.name, canton: company.canton }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      if (data.found) { onFound(data); setStatus('done') }
+      else setStatus('notfound')
+    } catch { setStatus('error') }
+  }
+
+  if (status === 'done')     return null
+  if (status === 'loading')  return <span className="enrich-status">🔍…</span>
+  if (status === 'notfound') return <span className="badge badge--red" title="Introuvable dans ZEFIX">?</span>
+  if (status === 'error')    return <span className="badge badge--red">!</span>
+  return (
+    <button className="btn-zefix-lookup" onClick={handleLookup} title="Vérifier dans ZEFIX">
+      🔗 ZEFIX
+    </button>
+  )
+}
+
 // ─── Bouton recherche domaine via Brave Search ────────────────────────────────
 function BraveSearchBtn({ company, onDomainFound }) {
   const [status, setStatus] = useState('idle') // idle | loading | done | error
@@ -262,6 +292,19 @@ export default function ContactTable({ companies, segment }) {
   const [expanded, setExpanded]   = useState(new Set())
   const [pushingAll, setPushingAll] = useState(false)
   // Domaines trouvés via Brave — persistés en localStorage par segment
+  // Données ZEFIX enrichies (uid → { uid, legalForm, canton, excerptUrl })
+  const [zefixData, setZefixData] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`scout_zefix_${segment}`) ?? '{}') } catch { return {} }
+  })
+
+  const handleZefixFound = useCallback((uid, data) => {
+    setZefixData((prev) => {
+      const next = { ...prev, [uid]: data }
+      try { localStorage.setItem(`scout_zefix_${segment}`, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }, [segment])
+
   const [foundDomains, setFoundDomains] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(`scout_domains_${segment}`) ?? '{}')
@@ -365,6 +408,10 @@ export default function ContactTable({ companies, segment }) {
         <tbody>
           {companies.map((c) => {
             const key = c.uid || c.name
+            const zefix = zefixData[key] ?? {}
+            const legalForm = zefix.legalForm ?? c.legalForm
+            const canton = zefix.canton ?? c.canton
+            const excerptUrl = zefix.excerptUrl ?? c.excerptUrl
             const domain = foundDomains[key]
               ?? (c.website ? new URL(c.website).hostname.replace('www.', '') : null)
             const isExpanded = expanded.has(key)
@@ -377,10 +424,10 @@ export default function ContactTable({ companies, segment }) {
                     <span className="company-name">
                       {domain ? (
                         <a href={`https://${domain}`} target="_blank" rel="noreferrer">{c.name}</a>
+                      ) : excerptUrl ? (
+                        <a href={excerptUrl} target="_blank" rel="noreferrer">{c.name}</a>
                       ) : c.website ? (
                         <a href={c.website} target="_blank" rel="noreferrer">{c.name}</a>
-                      ) : c.excerptUrl ? (
-                        <a href={c.excerptUrl} target="_blank" rel="noreferrer">{c.name}</a>
                       ) : c.name}
                     </span>
                     {domain
@@ -388,8 +435,12 @@ export default function ContactTable({ companies, segment }) {
                       : <BraveSearchBtn company={c} onDomainFound={(d) => handleDomainFound(key, d)} />
                     }
                   </td>
-                  <td>{c.legalForm}</td>
-                  <td>{c.canton ?? '—'}</td>
+                  <td>
+                    {legalForm === '—' || !legalForm
+                      ? <ZefixLookupBtn company={{ ...c, canton }} onFound={(d) => handleZefixFound(key, d)} />
+                      : legalForm}
+                  </td>
+                  <td>{canton ?? '—'}</td>
                   <td>
                     <span className={`badge ${c.status === 'active' ? 'badge--green' : 'badge--red'}`}>
                       {c.status}

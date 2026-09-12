@@ -103,6 +103,24 @@
 .badge--red   { background: #fde8e8; color: var(--red); }
 
 /* ── Bouton HubSpot company ── */
+/* ── Bouton ZEFIX lookup (enrichir UID/forme) ── */
+.btn-zefix-lookup {
+  background: transparent;
+  border: 1px solid #c9a266;
+  color: #c9a266;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s;
+}
+.btn-zefix-lookup:hover {
+  background: #f7f0e6;
+  color: #8a6a2a;
+}
+
 /* ── Bouton Brave Search (trouver domaine) ── */
 .btn-brave {
   background: transparent;
