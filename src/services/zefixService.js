@@ -30,25 +30,46 @@ export const LEGAL_FORMS = {
 // Formes acceptées pour les intermédiaires (on inclut aussi EI et SNC pour les petits cabinets)
 const INTERMEDIARY_FORMS = [1, 2, 3, 4];
 
-// ─── Mots-clés indicateurs par segment ───────────────────────────────────────
+// ─── Mots-clés de RECHERCHE ZEFIX par segment ────────────────────────────────
+// Ces termes sont envoyés à l'API ZEFIX pour trouver des sociétés candidates.
 export const SEGMENT_KEYWORDS = {
   fiduciaire: [
-    'fiduciaire', 'fiducia', 'treuhand', 'comptable', 'audit', 'révision',
-    'expertise comptable', 'conseil fiscal', 'tax', 'steuer',
+    'fiduciaire', 'treuhand', 'révision', 'audit', 'expertise comptable',
+    'conseil fiscal', 'comptabilité', 'buchhaltung',
   ],
   avocat: [
-    'avocat', 'avocats', 'notaire', 'étude', 'cabinet juridique',
-    'rechtsanwalt', 'rechtsanwälte', 'anwaltskanzlei', 'advokat',
-    'law', 'legal', 'juridique',
+    'avocat', 'notaire', 'rechtsanwalt', 'advokat', 'anwaltskanzlei',
+    'étude d\'avocats', 'cabinet d\'avocats',
   ],
   banque_cantonale: [
-    'banque cantonale', 'kantonalbank', 'bcv', 'bcge', 'bcn', 'bcf',
-    'bcvs', 'gkb', 'zkb', 'akb', 'lukb', 'sgkb', 'blkb', 'bkb',
+    'banque cantonale', 'kantonalbank',
   ],
   banque_affaires: [
-    'banque', 'bank', 'finance', 'capital', 'partners', 'advisory',
-    'm&a', 'corporate finance', 'investissement', 'investment',
-    'private equity', 'boutique',
+    'banque privée', 'banque d\'affaires', 'private bank',
+    'corporate finance', 'private equity', 'asset management',
+    'wealth management', 'gestion de fortune',
+  ],
+};
+
+// ─── Mots-clés de VALIDATION du nom (filtre post-query) ──────────────────────
+// Une société est acceptée si son nom contient AU MOINS UN de ces termes.
+// Cela élimine le bruit (ex: "Taxi Finance Sàrl" pour le segment fiduciaire).
+const SEGMENT_NAME_FILTER = {
+  fiduciaire: [
+    'fiduciaire', 'fiducia', 'treuhand', 'révision', 'audit', 'comptable',
+    'comptabilité', 'buchhaltung', 'steuerberatung', 'tax', 'expertise',
+  ],
+  avocat: [
+    'avocat', 'avocats', 'notaire', 'rechtsanwalt', 'rechtsanwälte',
+    'advokat', 'anwalt', 'law', 'legal', 'juridique', 'étude', 'cabinet',
+  ],
+  banque_cantonale: [
+    'cantonale', 'kantonalbank',
+  ],
+  banque_affaires: [
+    'banque', 'bank', 'finance', 'capital', 'advisory', 'partners',
+    'asset', 'wealth', 'gestion', 'investment', 'private equity',
+    'corporate', 'securities', 'holding',
   ],
 };
 
@@ -168,6 +189,15 @@ export async function searchIntermediaries({ segment, cantons = [], limit = 30 }
 
   // Filtrer sur les formes juridiques pertinentes
   companies = companies.filter((c) => INTERMEDIARY_FORMS.includes(c.legalFormId));
+
+  // Filtrer par nom : le nom doit contenir au moins un mot-clé de validation
+  const nameFilters = SEGMENT_NAME_FILTER[segment] ?? [];
+  if (nameFilters.length > 0) {
+    companies = companies.filter((c) => {
+      const nameLower = c.name.toLowerCase();
+      return nameFilters.some((kw) => nameLower.includes(kw.toLowerCase()));
+    });
+  }
 
   // Filtrer par canton si spécifié
   if (cantons.length > 0) {
