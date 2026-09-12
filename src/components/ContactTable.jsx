@@ -606,7 +606,7 @@ export default function ContactTable({ companies, segment }) {
                 className="btn-push-ready"
                 onClick={pushReady}
                 disabled={pushingReady}
-                title="Pousser vers HubSpot toutes les sociétés avec score ≥ 4/5"
+                title="Pousse automatiquement vers HubSpot toutes les sociétés avec un score de pertinence ≥ 4/5 (points verts)"
               >
                 {pushingReady ? 'Envoi…' : `🚀 → HS prêts (${readyCount})`}
               </button>
@@ -659,16 +659,31 @@ export default function ContactTable({ companies, segment }) {
       {selected.size > 0 && (
         <div className="bulk-bar">
           <span>{selected.size} sélectionné{selected.size > 1 ? 's' : ''}</span>
-          <button className="btn-bulk-enrich" onClick={enrichSelected} disabled={enriching || pushingAll || creatingTasks}>
+          <button
+            className="btn-bulk-enrich"
+            onClick={enrichSelected}
+            disabled={enriching || pushingAll || creatingTasks}
+            title="Recherche les dirigeants (CEO, CFO…) via LinkedIn pour les sociétés sélectionnées"
+          >
             {enriching
               ? `⚡ ${enrichProgress.step} ${enrichProgress.done}/${enrichProgress.total}…`
-              : `⚡ Enrichir (${selected.size})`}
+              : `⚡ Trouver les décideurs (${selected.size})`}
           </button>
-          <button className="btn-bulk-push" onClick={pushSelected} disabled={pushingAll || enriching || creatingTasks}>
-            {pushingAll ? 'Envoi…' : `→ HS (${selected.size})`}
+          <button
+            className="btn-bulk-push"
+            onClick={pushSelected}
+            disabled={pushingAll || enriching || creatingTasks}
+            title="Crée les sociétés sélectionnées dans HubSpot CRM"
+          >
+            {pushingAll ? 'Envoi…' : `→ HubSpot (${selected.size})`}
           </button>
-          <button className="btn-bulk-tasks" onClick={createTasksSelected} disabled={creatingTasks || enriching || pushingAll}>
-            {creatingTasks ? '📋 Création…' : `📋 Tâches HS (${selected.size})`}
+          <button
+            className="btn-bulk-tasks"
+            onClick={createTasksSelected}
+            disabled={creatingTasks || enriching || pushingAll}
+            title="Crée une tâche email dans HubSpot pour chaque société, avec un modèle pré-rédigé, à traiter dans 2 jours"
+          >
+            {creatingTasks ? '📋 Création…' : `📋 Tâches HubSpot (${selected.size})`}
           </button>
           {taskResult && (
             <span className="task-result">
