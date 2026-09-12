@@ -49,6 +49,15 @@ export const SEGMENT_KEYWORDS = {
     'corporate finance', 'private equity', 'asset management',
     'wealth management', 'gestion de fortune',
   ],
+  banque_privee: [
+    'banque privée', 'private bank', 'private banking', 'privatbank',
+    'banquier privé',
+  ],
+  gestionnaire_fortune: [
+    'gérant de fortune', 'gestion de fortune', 'vermögensverwaltung',
+    'vermögensverwalter', 'wealth management', 'gestion patrimoniale',
+    'gérance de fortune', 'conseiller en placement',
+  ],
 };
 
 // ─── Mots-clés de VALIDATION du nom (filtre post-query) ──────────────────────
@@ -70,6 +79,14 @@ const SEGMENT_NAME_FILTER = {
     'banque', 'bank', 'finance', 'capital', 'advisory', 'partners',
     'asset', 'wealth', 'gestion', 'investment', 'private equity',
     'corporate', 'securities', 'holding',
+  ],
+  banque_privee: [
+    'privée', 'privé', 'private', 'privatbank', 'banque', 'bank',
+  ],
+  gestionnaire_fortune: [
+    'fortune', 'patrimoine', 'patrimoniale', 'wealth', 'vermögen',
+    'vermögensverwalter', 'placement', 'gestion', 'gérance', 'gérant',
+    'asset', 'capital', 'invest',
   ],
 };
 

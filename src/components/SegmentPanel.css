@@ -12,6 +12,20 @@
 .panel-title {
   font-size: 18px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.source-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 20px;
+  vertical-align: middle;
 }
 .panel-desc {
   color: var(--text-muted);

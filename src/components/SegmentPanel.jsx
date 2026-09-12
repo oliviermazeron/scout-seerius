@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { searchIntermediaries } from '../services/zefixService.js'
+import { searchByBrave } from '../services/braveSegmentService.js'
 import { getBanquesCantonales } from '../services/banquesCantonales.js'
 import ContactTable from './ContactTable.jsx'
 import './SegmentPanel.css'
@@ -10,8 +11,15 @@ const ALL_CANTONS = [
   'TI','UR','VD','VS','ZG','ZH',
 ]
 
+// Badge source
+const SOURCE_BADGE = {
+  static: null,
+  zefix:  { label: 'ZEFIX',        color: '#1a3a5c' },
+  brave:  { label: 'Brave Search', color: '#8B4F1A' },
+}
+
 export default function SegmentPanel({ segment }) {
-  const [cantons, setCantons] = useState([])   // [] = tous
+  const [cantons, setCantons] = useState([])
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -29,9 +37,10 @@ export default function SegmentPanel({ segment }) {
     setSearched(true)
     try {
       let data
-      if (segment.id === 'banque_cantonale') {
-        // Liste fixe — pas besoin de ZEFIX (les banques cantonales sont connues)
+      if (segment.source === 'static') {
         data = getBanquesCantonales({ cantons })
+      } else if (segment.source === 'brave') {
+        data = await searchByBrave({ category: segment.id, cantons })
       } else {
         data = await searchIntermediaries({ segment: segment.id, cantons, limit: 50 })
       }
@@ -47,12 +56,24 @@ export default function SegmentPanel({ segment }) {
   // Reset quand on change d'onglet
   if (!searched && results.length > 0) setResults([])
 
+  const badge = SOURCE_BADGE[segment.source]
+  const btnLabel = segment.source === 'static'
+    ? '🏦 Afficher les banques cantonales'
+    : segment.source === 'brave'
+    ? '🌐 Lancer la recherche'
+    : '🔍 Lancer la recherche'
+
   return (
     <div className="panel">
       <div className="panel-header">
         <div>
           <h2 className="panel-title">
             {segment.icon} {segment.label}
+            {badge && (
+              <span className="source-badge" style={{ background: badge.color }}>
+                {badge.label}
+              </span>
+            )}
           </h2>
           <p className="panel-desc">{segment.description}</p>
         </div>
@@ -81,11 +102,7 @@ export default function SegmentPanel({ segment }) {
 
       <div className="search-bar">
         <button className="btn-search" onClick={handleSearch} disabled={loading}>
-          {loading
-            ? 'Chargement…'
-            : segment.id === 'banque_cantonale'
-            ? '🏦 Afficher les banques cantonales'
-            : '🔍 Lancer la recherche'}
+          {loading ? 'Chargement…' : btnLabel}
         </button>
         {searched && !loading && (
           <span className="result-count">
