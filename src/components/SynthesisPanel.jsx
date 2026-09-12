@@ -11,6 +11,8 @@ const BASE_COUNTS = {
   avocat:                null,
   family_office:         null,
   multi_family_office:   null,
+  notaire:               null,
+  conseil_fiscal:        null,
 }
 
 const SEGMENT_LABELS = {
@@ -23,6 +25,8 @@ const SEGMENT_LABELS = {
   asset_manager:         { label: 'Asset Managers',           icon: '🏗️' },
   family_office:         { label: 'Family Offices',           icon: '🏛️' },
   multi_family_office:   { label: 'Multi Family Offices',     icon: '🌐' },
+  notaire:               { label: 'Notaires',                 icon: '📜' },
+  conseil_fiscal:        { label: 'Conseils fiscaux',         icon: '🧾' },
 }
 
 function readLS(key) {

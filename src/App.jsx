@@ -68,6 +68,20 @@ const SEGMENTS = [
     source: 'brave',
     description: 'Multi family offices (MFO) suisses gérant plusieurs familles — source Brave Search',
   },
+  {
+    id: 'notaire',
+    label: 'Notaires',
+    icon: '📜',
+    source: 'zefix',
+    description: 'Offices et études notariales suisses — registre ZEFIX (mots-clés notaire, notariat, notar)',
+  },
+  {
+    id: 'conseil_fiscal',
+    label: 'Conseils fiscaux',
+    icon: '🧾',
+    source: 'zefix',
+    description: 'Cabinets de conseil fiscal et tax advisory suisses — registre ZEFIX',
+  },
 ]
 
 const SYNTHESIS_ID = '__synthesis__'

@@ -38,8 +38,17 @@ export const SEGMENT_KEYWORDS = {
     'conseil fiscal', 'comptabilité', 'buchhaltung',
   ],
   avocat: [
-    'avocat', 'notaire', 'rechtsanwalt', 'advokat', 'anwaltskanzlei',
+    'avocat', 'rechtsanwalt', 'advokat', 'anwaltskanzlei',
     'étude d\'avocats', 'cabinet d\'avocats',
+  ],
+  notaire: [
+    'notaire', 'notariat', 'notar', 'notariatskanzlei',
+    'office notarial', 'étude notariale',
+  ],
+  conseil_fiscal: [
+    'conseil fiscal', 'conseiller fiscal', 'steuerberatung', 'steuerberater',
+    'tax advisory', 'tax consulting', 'tax counsel',
+    'fiscalité', 'tax', 'impôts',
   ],
   banque_cantonale: [
     'banque cantonale', 'kantonalbank',
@@ -69,8 +78,16 @@ const SEGMENT_NAME_FILTER = {
     'comptabilité', 'buchhaltung', 'steuerberatung', 'tax', 'expertise',
   ],
   avocat: [
-    'avocat', 'avocats', 'notaire', 'rechtsanwalt', 'rechtsanwälte',
+    'avocat', 'avocats', 'rechtsanwalt', 'rechtsanwälte',
     'advokat', 'anwalt', 'law', 'legal', 'juridique', 'étude', 'cabinet',
+  ],
+  notaire: [
+    'notaire', 'notariat', 'notar', 'notariatskanzlei', 'notarielle',
+    'office notarial', 'étude notariale',
+  ],
+  conseil_fiscal: [
+    'fiscal', 'fisc', 'steuerberatung', 'steuerberater', 'tax',
+    'fiscalité', 'impôt', 'conseil fiscal', 'tax advisory',
   ],
   banque_cantonale: [
     'cantonale', 'kantonalbank',
