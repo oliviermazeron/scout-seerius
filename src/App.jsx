@@ -2,6 +2,8 @@ import { useState } from 'react'
 import './App.css'
 import SegmentPanel from './components/SegmentPanel.jsx'
 import SynthesisPanel from './components/SynthesisPanel.jsx'
+import DealPanel from './components/DealPanel.jsx'
+import CampaignPanel from './components/CampaignPanel.jsx'
 
 // source: 'zefix' | 'static' | 'brave'
 const SEGMENTS = [
@@ -85,12 +87,16 @@ const SEGMENTS = [
 ]
 
 const SYNTHESIS_ID = '__synthesis__'
+const DEALS_ID     = '__deals__'
+const CAMPAIGN_ID  = '__campaign__'
 
 export default function App() {
   const [activeSegment, setActiveSegment] = useState(SYNTHESIS_ID)
 
-  const segment = SEGMENTS.find((s) => s.id === activeSegment)
+  const segment    = SEGMENTS.find((s) => s.id === activeSegment)
   const isSynthesis = activeSegment === SYNTHESIS_ID
+  const isDeals     = activeSegment === DEALS_ID
+  const isCampaign  = activeSegment === CAMPAIGN_ID
 
   return (
     <div className="app">
@@ -118,6 +124,20 @@ export default function App() {
           <span>📊</span>
           <span>Synthèse</span>
         </button>
+        <button
+          className={`tab tab--synthesis ${isDeals ? 'tab--active' : ''}`}
+          onClick={() => setActiveSegment(DEALS_ID)}
+        >
+          <span>🤝</span>
+          <span>Deals</span>
+        </button>
+        <button
+          className={`tab tab--synthesis ${isCampaign ? 'tab--active' : ''}`}
+          onClick={() => setActiveSegment(CAMPAIGN_ID)}
+        >
+          <span>📣</span>
+          <span>Campagnes</span>
+        </button>
         <div className="tabs-divider" />
         {SEGMENTS.map((s) => (
           <button
@@ -132,10 +152,10 @@ export default function App() {
       </nav>
 
       <main className="main">
-        {isSynthesis
-          ? <SynthesisPanel onNavigate={(id) => setActiveSegment(id)} />
-          : <SegmentPanel segment={segment} />
-        }
+        {isSynthesis  && <SynthesisPanel onNavigate={(id) => setActiveSegment(id)} />}
+        {isDeals      && <DealPanel      onNavigate={(id) => setActiveSegment(id)} />}
+        {isCampaign   && <CampaignPanel  onNavigate={(id) => setActiveSegment(id)} />}
+        {segment      && <SegmentPanel   segment={segment} />}
       </main>
     </div>
   )

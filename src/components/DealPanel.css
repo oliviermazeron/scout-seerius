@@ -1,0 +1,250 @@
+.deal-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.deal-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.deal-panel-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+.deal-panel-sub { font-size: 13px; color: var(--text-muted); }
+
+.btn-new-deal {
+  background: var(--accent);
+  color: #fff;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.btn-new-deal:hover { opacity: .85; }
+
+/* ── Formulaire ── */
+.deal-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.deal-form-row { display: flex; flex-direction: column; gap: 6px; }
+.deal-form-row label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.deal-form-row--inline { flex-direction: row; gap: 24px; }
+.deal-form-row--inline > div { display: flex; flex-direction: column; gap: 6px; }
+
+.deal-input, .deal-select, .deal-textarea {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+}
+.deal-input:focus, .deal-select:focus, .deal-textarea:focus { outline: 1px solid var(--gold); }
+.deal-textarea { resize: vertical; font-family: inherit; }
+.deal-input-sm {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  width: 80px;
+}
+.range-inputs { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
+
+/* Types */
+.type-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+.type-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  cursor: pointer;
+  transition: all .15s;
+  min-width: 160px;
+}
+.type-btn:hover { border-color: var(--gold); background: var(--gold-light); }
+.type-btn--on { border-color: var(--accent); background: var(--accent-light); }
+.type-icon { font-size: 18px; }
+.type-label { font-size: 13px; font-weight: 700; color: var(--text); }
+.type-desc { font-size: 11px; color: var(--text-muted); }
+
+/* Cantons */
+.canton-grid-sm { display: flex; flex-wrap: wrap; gap: 4px; }
+.canton-btn-sm {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.canton-btn-sm--on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.deal-form-actions { display: flex; gap: 10px; }
+.btn-save-deal {
+  background: var(--accent);
+  color: #fff;
+  padding: 9px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius);
+}
+.btn-save-deal:disabled { opacity: .4; cursor: default; }
+.btn-cancel-deal {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 9px 16px;
+  font-size: 13px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+/* ── Carte deal ── */
+.deal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.deal-card--actif { border-left: 3px solid var(--gold); }
+.deal-card--signé { border-left: 3px solid var(--green); }
+.deal-card--abandonné { border-left: 3px solid var(--border); opacity: .6; }
+
+.deal-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  cursor: pointer;
+  gap: 12px;
+}
+.deal-card-header:hover { background: var(--bg); }
+.deal-card-left { display: flex; align-items: center; gap: 12px; }
+.deal-type-icon { font-size: 22px; flex-shrink: 0; }
+.deal-card-name { font-size: 15px; font-weight: 600; color: var(--text); }
+.deal-card-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.deal-card-right { display: flex; align-items: center; gap: 8px; }
+
+.deal-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.deal-status--actif   { background: var(--gold-light);  color: #8a6a2a; }
+.deal-status--signé   { background: var(--green-light); color: var(--green); }
+.deal-status--abandonné { background: var(--bg); color: var(--text-muted); }
+
+.btn-deal-edit, .btn-deal-delete {
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+  opacity: .5;
+}
+.btn-deal-edit:hover, .btn-deal-delete:hover { opacity: 1; }
+.deal-chevron { font-size: 11px; color: var(--text-muted); }
+
+.deal-card-body {
+  padding: 16px 18px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+.deal-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-left: 3px solid var(--gold);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+/* ── Matching ── */
+.deal-match {}
+.match-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.match-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+.match-cantons { font-size: 12px; color: var(--accent); font-weight: 500; }
+
+.match-list { display: flex; flex-direction: column; gap: 6px; }
+.match-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 9px 14px;
+  gap: 12px;
+}
+.match-row--3 { border-color: var(--gold); }
+.match-seg { display: flex; align-items: center; gap: 8px; flex: 1; }
+.match-icon { font-size: 16px; }
+.match-label { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; }
+.match-stars { display: flex; gap: 2px; }
+.match-star { font-size: 12px; color: var(--border); }
+.match-star--on { color: var(--gold); }
+
+.match-actions { display: flex; align-items: center; gap: 6px; }
+.btn-match-copy {
+  background: var(--gold-light);
+  border: 1px solid var(--gold);
+  color: #8a6a2a;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-match-copy:hover { background: var(--gold); color: #fff; }
+.btn-match-go {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.btn-match-go:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+
+/* ── Vide ── */
+.deal-empty {
+  padding: 40px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}

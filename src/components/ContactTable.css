@@ -5,6 +5,17 @@
   overflow: hidden;
 }
 
+/* ── Statut relation ── */
+.statut-select {
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
 /* ── Score de pertinence ── */
 .score-dots {
   display: inline-flex;

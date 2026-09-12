@@ -1,6 +1,27 @@
 import { useState, useCallback, useMemo } from 'react'
 import './ContactTable.css'
 
+const STATUTS = ['—', 'Contacté', 'RDV', 'Partenaire']
+const STATUT_STYLE = {
+  '—':          { background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' },
+  'Contacté':   { background: 'var(--gold-light)', color: '#8a6a2a', border: '1px solid var(--gold)' },
+  'RDV':        { background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' },
+  'Partenaire': { background: 'var(--green-light)', color: 'var(--green)', border: '1px solid var(--green)' },
+}
+
+function StatusSelect({ value, onChange }) {
+  return (
+    <select
+      className="statut-select"
+      value={value ?? '—'}
+      onChange={(e) => onChange(e.target.value === '—' ? null : e.target.value)}
+      style={STATUT_STYLE[value ?? '—']}
+    >
+      {STATUTS.map((s) => <option key={s} value={s}>{s}</option>)}
+    </select>
+  )
+}
+
 // ─── Score de pertinence (0-5) ────────────────────────────────────────────────
 function relevanceScore(c, domain, zefix) {
   let s = 0
@@ -339,6 +360,20 @@ export default function ContactTable({ companies, segment }) {
     })
   }, [segment])
 
+  const [statutData, setStatutData] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('scout_campaign') ?? '{}') } catch { return {} }
+  })
+  const handleStatutChange = useCallback((key, statut) => {
+    setStatutData((prev) => {
+      const campaignKey = `${segment}:${key}`
+      const next = { ...prev }
+      if (!statut) delete next[campaignKey]
+      else next[campaignKey] = statut
+      try { localStorage.setItem('scout_campaign', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }, [segment])
+
   // ── Formes juridiques disponibles (pour le filtre) ────────────────────────
   const availableForms = useMemo(() => {
     const forms = new Set()
@@ -596,10 +631,11 @@ export default function ContactTable({ companies, segment }) {
             <th>Société</th>
             <th>Forme</th>
             <th>Canton</th>
-            <th>Statut</th>
-            <th>Emails (Hunter)</th>
-            <th>Décideurs (LinkedIn)</th>
-            <th>Company →HS</th>
+            <th>ZEFIX</th>
+            <th>Relation</th>
+            <th>Emails</th>
+            <th>Décideurs</th>
+            <th>→HS</th>
           </tr>
         </thead>
         <tbody>
@@ -641,6 +677,12 @@ export default function ContactTable({ companies, segment }) {
                     <span className={`badge ${c.status === 'active' ? 'badge--green' : 'badge--red'}`}>
                       {c.status}
                     </span>
+                  </td>
+                  <td>
+                    <StatusSelect
+                      value={statutData[`${segment}:${key}`] ?? null}
+                      onChange={(v) => handleStatutChange(key, v)}
+                    />
                   </td>
                   <td>
                     <button
