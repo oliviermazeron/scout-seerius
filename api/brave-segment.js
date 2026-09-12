@@ -7,17 +7,22 @@
 
 const CATEGORY_QUERIES = {
   family_office: [
-    'family office Genève suisse',
-    'family office Zürich suisse',
-    'family office Lausanne suisse',
-    'family office suisse gestion patrimoniale',
-    '"family office" site:.ch',
+    '"family office" Genève',
+    '"family office" Zürich',
+    '"family office" Lausanne',
+    '"family office" Zug',
+    '"family office" Suisse gestion patrimoine',
+    '"single family office" suisse',
+    'family office SA Genève gestion fortune',
+    'family office AG Zürich wealth',
   ],
   multi_family_office: [
-    'multi family office suisse',
-    'multi-family office Genève',
-    '"multi family office" suisse gestion fortune',
-    'MFO gestion patrimoniale suisse',
+    '"multi family office" suisse',
+    '"multi-family office" Genève',
+    '"multi family office" Zürich',
+    'MFO suisse gestion fortune plusieurs familles',
+    '"multi family" wealth management suisse',
+    'multi family office Zug Genève',
   ],
 }
 

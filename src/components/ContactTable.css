@@ -5,6 +5,30 @@
   overflow: hidden;
 }
 
+/* ── Barre export ── */
+.table-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.btn-export-csv {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-export-csv:hover {
+  background: var(--gold-light, #f7f0e6);
+  border-color: var(--gold, #c9a266);
+  color: var(--text);
+}
+
 /* ── Barre actions groupées ── */
 .bulk-bar {
   display: flex;

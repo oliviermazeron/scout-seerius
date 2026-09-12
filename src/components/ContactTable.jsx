@@ -261,12 +261,20 @@ export default function ContactTable({ companies, segment }) {
   const [selected, setSelected]   = useState(new Set())
   const [expanded, setExpanded]   = useState(new Set())
   const [pushingAll, setPushingAll] = useState(false)
-  // Domaines trouvés via Brave (uid → domain)
-  const [foundDomains, setFoundDomains] = useState({})
+  // Domaines trouvés via Brave — persistés en localStorage par segment
+  const [foundDomains, setFoundDomains] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`scout_domains_${segment}`) ?? '{}')
+    } catch { return {} }
+  })
 
   const handleDomainFound = useCallback((uid, domain) => {
-    setFoundDomains((prev) => ({ ...prev, [uid]: domain }))
-  }, [])
+    setFoundDomains((prev) => {
+      const next = { ...prev, [uid]: domain }
+      try { localStorage.setItem(`scout_domains_${segment}`, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }, [segment])
 
   function toggleSelect(uid) {
     setSelected((prev) => { const n = new Set(prev); n.has(uid) ? n.delete(uid) : n.add(uid); return n })
@@ -276,6 +284,33 @@ export default function ContactTable({ companies, segment }) {
   }
   function toggleAll() {
     setSelected(selected.size === companies.length ? new Set() : new Set(companies.map((c) => c.uid || c.name)))
+  }
+
+  function exportCSV() {
+    const rows = [
+      ['Société', 'Forme', 'Canton', 'Ville', 'Domaine', 'Statut', 'UID', 'Extrait'],
+      ...companies.map((c) => {
+        const domain = foundDomains[c.uid || c.name] ?? (c.website ? new URL(c.website).hostname.replace('www.', '') : '')
+        return [
+          c.name,
+          c.legalForm ?? '',
+          c.canton ?? '',
+          c.municipality ?? '',
+          domain,
+          c.status ?? '',
+          c.uid ?? '',
+          c.excerptUrl ?? '',
+        ]
+      }),
+    ]
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `scout-${segment}-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   async function pushSelected() {
@@ -300,6 +335,11 @@ export default function ContactTable({ companies, segment }) {
 
   return (
     <div className="table-wrapper">
+      <div className="table-actions">
+        <button className="btn-export-csv" onClick={exportCSV}>
+          ⬇ Export CSV ({companies.length})
+        </button>
+      </div>
       {selected.size > 0 && (
         <div className="bulk-bar">
           <span>{selected.size} sélectionné{selected.size > 1 ? 's' : ''}</span>
