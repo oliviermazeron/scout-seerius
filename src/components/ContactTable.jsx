@@ -1,6 +1,25 @@
 import { useState, useCallback, useMemo } from 'react'
 import './ContactTable.css'
 
+// Templates d'email par segment (version courte pour tâche HubSpot)
+const SEGMENT_TEMPLATES = {
+  fiduciaire:           (co) => `Objet : Collaboration M&A — Seerius x ${co}\n\nMadame, Monsieur,\n\nEn tant que fiduciaire, vous êtes souvent le premier à accompagner vos clients dans des moments clés — notamment lorsqu'un dirigeant envisage une transmission ou une cession.\n\nSeerius est une boutique M&A suisse spécialisée dans l'accompagnement des PME lors de cessions, acquisitions et levées de fonds.\n\nSeriez-vous disponible pour un échange de 20 minutes ?\n\nCordialement,\n[Votre nom] — Seerius`,
+  avocat:               (co) => `Objet : Partenariat M&A — Seerius x ${co}\n\nMadame, Monsieur,\n\nVotre cabinet intervient régulièrement dans des opérations de cession et d'acquisition d'entreprises. Seerius accompagne les cédants et acquéreurs en amont : valorisation, structuration, identification de contreparties.\n\nSeriez-vous disponible pour un café ou un appel de 20 minutes ?\n\nCordialement,\n[Votre nom] — Seerius`,
+  notaire:              (co) => `Objet : Collaboration transmissions — Seerius x ${co}\n\nMadame, Monsieur,\n\nLes transmissions d'entreprises passent souvent par votre étude pour leur formalisation. Seerius intervient en amont pour préparer et structurer ces transactions.\n\nSeriez-vous disponible pour un échange de 20 minutes ?\n\nCordialement,\n[Votre nom] — Seerius`,
+  banque_privee:        (co) => `Objet : Opportunités post-cession — Seerius x ${co}\n\nMadame, Monsieur,\n\nVos clients entrepreneurs qui cèdent leur entreprise cherchent souvent un accompagnement patrimonial. Seerius les accompagne dans la phase de cession et peut vous les présenter au moment opportun.\n\nUn échange serait-il possible ?\n\nCordialement,\n[Votre nom] — Seerius`,
+  banque_affaires:      (co) => `Objet : Co-advisory M&A — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius est une boutique M&A dédiée aux PME suisses. Nous cherchons à collaborer avec des banques d'affaires sur des mandats complémentaires.\n\nSeriez-vous disponible pour un échange de 20 minutes ?\n\nCordialement,\n[Votre nom] — Seerius`,
+  gestionnaire_fortune: (co) => `Objet : Opportunités PME suisses — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius gère des mandats de cession de PME suisses et peut vous présenter des opportunités d'investissement correspondant aux critères de vos clients.\n\nSeriez-vous disponible pour un échange ?\n\nCordialement,\n[Votre nom] — Seerius`,
+  asset_manager:        (co) => `Objet : Opportunités PME — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius accompagne des PME suisses dans leurs opérations de cession et de levée de fonds. Nous pourrions vous présenter des opportunités correspondant à vos stratégies.\n\nUn échange de 20 minutes serait-il possible ?\n\nCordialement,\n[Votre nom] — Seerius`,
+  family_office:        (co) => `Objet : Opportunités d'investissement direct — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius peut vous proposer des opportunités d'investissement direct dans des PME suisses de qualité.\n\nSeriez-vous ouverts à un échange confidentiel ?\n\nCordialement,\n[Votre nom] — Seerius`,
+  multi_family_office:  (co) => `Objet : Co-investissement PME suisses — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius gère des mandats de cession de PME suisses rentables et peut vous en présenter en exclusivité.\n\nSeriez-vous disponible pour un échange ?\n\nCordialement,\n[Votre nom] — Seerius`,
+  conseil_fiscal:       (co) => `Objet : Collaboration transmissions — Seerius x ${co}\n\nMadame, Monsieur,\n\nLes transmissions d'entreprises ont souvent des enjeux fiscaux significatifs. Seerius intervient en amont pour structurer et préparer ces transactions, en coordination avec les conseils fiscaux.\n\nSeriez-vous disponible pour un échange de 20 minutes ?\n\nCordialement,\n[Votre nom] — Seerius`,
+  banque_cantonale:     (co) => `Objet : Collaboration PME — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius accompagne des PME suisses dans leurs projets de transmission et de croissance. Nous serions ravis d'explorer une collaboration.\n\nSeriez-vous disponible pour un échange ?\n\nCordialement,\n[Votre nom] — Seerius`,
+}
+function getTemplate(segmentId, companyName) {
+  const fn = SEGMENT_TEMPLATES[segmentId]
+  return fn ? fn(companyName) : `Email à envoyer à ${companyName} — Seerius`
+}
+
 const STATUTS = ['—', 'Contacté', 'RDV', 'Partenaire']
 const STATUT_STYLE = {
   '—':          { background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' },
@@ -435,8 +454,36 @@ export default function ContactTable({ companies, segment }) {
     URL.revokeObjectURL(url)
   }
 
-  const [enriching, setEnriching] = useState(false)
+  const [creatingTasks, setCreatingTasks]   = useState(false)
+  const [taskResult, setTaskResult]         = useState(null) // { created, errors }
+  const [enriching, setEnriching]           = useState(false)
   const [enrichProgress, setEnrichProgress] = useState({ done: 0, total: 0, step: '' })
+
+  async function createTasksSelected() {
+    const targets = filtered.filter((c) => selected.has(c._key))
+    setCreatingTasks(true)
+    setTaskResult(null)
+
+    const tasks = targets.map((c) => ({
+      companyName:  c.name,
+      contactName:  '',
+      contactRole:  '',
+      template:     getTemplate(segment, c.name),
+    }))
+
+    try {
+      const r = await fetch('/api/hubspot-tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tasks }),
+      })
+      const data = await r.json()
+      setTaskResult(data)
+    } catch {
+      setTaskResult({ created: 0, errors: tasks.length })
+    }
+    setCreatingTasks(false)
+  }
 
   async function enrichSelected() {
     const targets = filtered.filter((c) => selected.has(c._key))
@@ -612,14 +659,23 @@ export default function ContactTable({ companies, segment }) {
       {selected.size > 0 && (
         <div className="bulk-bar">
           <span>{selected.size} sélectionné{selected.size > 1 ? 's' : ''}</span>
-          <button className="btn-bulk-enrich" onClick={enrichSelected} disabled={enriching || pushingAll}>
+          <button className="btn-bulk-enrich" onClick={enrichSelected} disabled={enriching || pushingAll || creatingTasks}>
             {enriching
               ? `⚡ ${enrichProgress.step} ${enrichProgress.done}/${enrichProgress.total}…`
               : `⚡ Enrichir (${selected.size})`}
           </button>
-          <button className="btn-bulk-push" onClick={pushSelected} disabled={pushingAll || enriching}>
+          <button className="btn-bulk-push" onClick={pushSelected} disabled={pushingAll || enriching || creatingTasks}>
             {pushingAll ? 'Envoi…' : `→ HS (${selected.size})`}
           </button>
+          <button className="btn-bulk-tasks" onClick={createTasksSelected} disabled={creatingTasks || enriching || pushingAll}>
+            {creatingTasks ? '📋 Création…' : `📋 Tâches HS (${selected.size})`}
+          </button>
+          {taskResult && (
+            <span className="task-result">
+              ✓ {taskResult.created} tâche{taskResult.created !== 1 ? 's' : ''} créée{taskResult.created !== 1 ? 's' : ''}
+              {taskResult.errors > 0 ? ` · ${taskResult.errors} erreur${taskResult.errors > 1 ? 's' : ''}` : ''}
+            </span>
+          )}
         </div>
       )}
 
