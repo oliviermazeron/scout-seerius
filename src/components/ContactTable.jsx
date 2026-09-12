@@ -73,13 +73,13 @@ function LinkedInRow({ domain, segment, companyName }) {
   const [pushStates, setPushStates] = useState({})
 
   async function handleSearch() {
-    if (!domain) return
+    if (!domain && !companyName) return
     setStatus('loading')
     try {
       const res = await fetch('/api/proxycurl', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain }),
+        body: JSON.stringify({ domain: domain ?? '', companyName }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
@@ -117,29 +117,31 @@ function LinkedInRow({ domain, segment, companyName }) {
     }
   }
 
-  if (!domain) return <span className="no-domain">Domaine inconnu</span>
   if (status === 'idle')    return <button className="btn-enrich btn-linkedin" onClick={handleSearch}>🔗 LinkedIn</button>
   if (status === 'loading') return <span className="enrich-status">Recherche LinkedIn…</span>
   if (status === 'error')   return <span className="badge badge--red">Erreur NinjaPear</span>
-  if (employees.length === 0) return <span className="enrich-status">Aucun décideur trouvé pour {domain}</span>
+  if (employees.length === 0) return <span className="enrich-status">Aucun décideur trouvé{domain ? ` pour ${domain}` : ''}{companyName ? ` (${companyName})` : ''}</span>
 
   return (
     <div className="contacts-list">
       <div className="contacts-list-header">
-        {employees.length} décideur{employees.length > 1 ? 's' : ''} trouvé{employees.length > 1 ? 's' : ''} via LinkedIn
+        {employees.length} décideur{employees.length > 1 ? 's' : ''} trouvé{employees.length > 1 ? 's' : ''}
       </div>
       {employees.map((e) => {
         const key = `${e.firstName}|${e.lastName}`
+        const sourceBadge = e.source === 'brave' ? '🌐' : e.source === 'ninjapear-name' ? '🏢' : '🔗'
+        const sourceTitle = e.source === 'brave' ? 'Via Brave Search' : e.source === 'ninjapear-name' ? 'Via nom de société (NinjaPear)' : 'Via domaine (NinjaPear)'
         return (
           <div key={key} className="contact-row">
             <div className="contact-info">
               <span className="contact-name">{e.firstName} {e.lastName}</span>
               {e.role && <span className="contact-pos">{e.role}</span>}
               {e.profileUrl && (
-                <a href={e.profileUrl} target="_blank" rel="noreferrer" className="contact-email">
-                  🔗 LinkedIn
+                <a href={e.profileUrl} target="_blank" rel="noreferrer" className="contact-email" title={sourceTitle}>
+                  {sourceBadge} LinkedIn
                 </a>
               )}
+              {!e.profileUrl && <span className="contact-pos" title={sourceTitle}>{sourceBadge}</span>}
             </div>
             <button
               className={`btn-push-contact ${pushStates[key] === 'done' ? 'btn-push-contact--done' : ''}`}
