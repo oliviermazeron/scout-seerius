@@ -483,10 +483,60 @@ export default function ContactTable({ companies, segment }) {
     setSelected(new Set())
   }
 
+  const [pushingReady, setPushingReady] = useState(false)
+  const [pushReadyResult, setPushReadyResult] = useState(null) // { pushed, skipped }
+
+  async function pushReady() {
+    const targets = filtered.filter((c) => c._score >= 4)
+    if (!targets.length) return
+    setPushingReady(true)
+    setPushReadyResult(null)
+    let pushed = 0, skipped = 0
+    await Promise.allSettled(targets.map(async (c) => {
+      try {
+        const r = await fetch('/api/hubspot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: c.name,
+            domain: c._domain ?? undefined,
+            canton: c.canton ?? '',
+            uid: c.uid ?? '',
+            segment,
+          }),
+        })
+        r.ok ? pushed++ : skipped++
+      } catch { skipped++ }
+    }))
+    setPushingReady(false)
+    setPushReadyResult({ pushed, skipped })
+  }
+
   return (
     <div className="table-wrapper">
       {/* ── Barre export ── */}
       <div className="table-actions">
+        {(() => {
+          const readyCount = filtered.filter((c) => c._score >= 4).length
+          return readyCount > 0 ? (
+            <div className="push-ready-wrap">
+              <button
+                className="btn-push-ready"
+                onClick={pushReady}
+                disabled={pushingReady}
+                title="Pousser vers HubSpot toutes les sociétés avec score ≥ 4/5"
+              >
+                {pushingReady ? 'Envoi…' : `🚀 → HS prêts (${readyCount})`}
+              </button>
+              {pushReadyResult && (
+                <span className="push-ready-result">
+                  ✓ {pushReadyResult.pushed} poussés
+                  {pushReadyResult.skipped > 0 ? ` · ${pushReadyResult.skipped} erreurs` : ''}
+                </span>
+              )}
+            </div>
+          ) : null
+        })()}
         <button className="btn-export-csv" onClick={exportCSV}>
           ⬇ Export CSV ({filtered.length})
         </button>
