@@ -15,15 +15,15 @@ const SEGMENTS = [
     id: 'banque_privee',
     label: 'Banques privées',
     icon: '🔐',
-    source: 'zefix',
-    description: 'Banques privées et établissements de private banking actifs en Suisse',
+    source: 'finma',
+    description: 'Banques privées et régionales licenciées FINMA — catégorie 4 (62 entités)',
   },
   {
     id: 'banque_affaires',
     label: "Banques d'affaires",
     icon: '💼',
-    source: 'zefix',
-    description: "Boutiques M&A et banques d'affaires suisses spécialisées en transactions PME",
+    source: 'finma',
+    description: "Banques et maisons de titres licenciées FINMA — catégorie 5 (170 entités)",
   },
   {
     id: 'fiduciaire',
@@ -45,6 +45,13 @@ const SEGMENTS = [
     icon: '📈',
     source: 'finma',
     description: 'Gestionnaires de fortune et trustees licenciés FINMA — registre officiel (1 508 entités)',
+  },
+  {
+    id: 'asset_manager',
+    label: 'Asset Managers',
+    icon: '🏗️',
+    source: 'finma',
+    description: 'Directions de fonds, gestionnaires de fortune collective et représentants licenciés FINMA (431 entités)',
   },
   {
     id: 'family_office',

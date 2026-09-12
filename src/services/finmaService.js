@@ -1,14 +1,21 @@
-// ─── Service FINMA GFI ────────────────────────────────────────────────────────
-// Filtre le registre local FINMA des gestionnaires de fortune (1508 entités).
-import { FINMA_GFI } from './finmaGfi.js'
+// ─── Service FINMA — tous segments ───────────────────────────────────────────
+import { FINMA_GFI }              from './finmaGfi.js'
+import { FINMA_BANQUES_PRIVEES }  from './finmaBanquesPrivees.js'
+import { FINMA_BANQUES_AFFAIRES } from './finmaBanquesAffaires.js'
+import { FINMA_ASSET_MANAGERS }   from './finmaAssetManagers.js'
 
-export function searchFinmaGFI({ cantons = [], limit = 50, trusteeOnly = false }) {
-  let results = FINMA_GFI
+const FINMA_SOURCES = {
+  gestionnaire_fortune: FINMA_GFI,
+  banque_privee:        FINMA_BANQUES_PRIVEES,
+  banque_affaires:      FINMA_BANQUES_AFFAIRES,
+  asset_manager:        FINMA_ASSET_MANAGERS,
+}
 
-  // Filtre GFI / Trustee
-  if (trusteeOnly) {
-    results = results.filter((c) => c.isTrustee)
-  }
+export function searchFinma({ segment, cantons = [], limit = 2000 }) {
+  const source = FINMA_SOURCES[segment]
+  if (!source) throw new Error(`Segment FINMA inconnu : ${segment}`)
+
+  let results = source
 
   // Filtre canton
   if (cantons.length > 0) {
@@ -19,4 +26,9 @@ export function searchFinmaGFI({ cantons = [], limit = 50, trusteeOnly = false }
   results = [...results].sort((a, b) => a.name.localeCompare(b.name, 'fr'))
 
   return results.slice(0, limit)
+}
+
+// Alias utilisé dans SegmentPanel (passe segment en option)
+export function searchFinmaGFI({ cantons = [], limit = 2000, segment = 'gestionnaire_fortune' }) {
+  return searchFinma({ segment, cantons, limit })
 }
