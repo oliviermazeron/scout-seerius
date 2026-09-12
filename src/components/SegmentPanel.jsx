@@ -85,7 +85,7 @@ export default function SegmentPanel({ segment }) {
             ? 'Chargement…'
             : segment.id === 'banque_cantonale'
             ? '🏦 Afficher les banques cantonales'
-            : '🔍 Lancer la recherche ZEFIX'}
+            : '🔍 Lancer la recherche'}
         </button>
         {searched && !loading && (
           <span className="result-count">
