@@ -75,7 +75,7 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: 'NINJAPEAR_API_KEY non configurée' })
 
   const { domain, companyName } = req.body ?? {}
-  if (!domain) return res.status(400).json({ error: 'domain requis' })
+  if (!domain && !companyName) return res.status(400).json({ error: 'domain ou companyName requis' })
 
   try {
     const seen = new Set()
@@ -97,16 +97,18 @@ export default async function handler(req, res) {
     }
 
     // ── Niveau 1 : NinjaPear par domaine + rôles élargis ──────────────────────
-    await Promise.allSettled(
-      ROLES_PRIORITY.map(async (role) => {
-        const results = await searchNinjaPear(apiKey, {
-          company_website: domain,
-          role,
-          page_size: '5',
+    if (domain) {
+      await Promise.allSettled(
+        ROLES_PRIORITY.map(async (role) => {
+          const results = await searchNinjaPear(apiKey, {
+            company_website: domain,
+            role,
+            page_size: '5',
+          })
+          results.forEach(e => addEmployee(e, 'ninjapear'))
         })
-        results.forEach(e => addEmployee(e, 'ninjapear'))
-      })
-    )
+      )
+    }
 
     // ── Niveau 2 : NinjaPear par nom de société (si peu de résultats) ─────────
     if (employees.length < 3 && companyName) {
