@@ -1,5 +1,40 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import './ContactTable.css'
+
+// ─── Bouton recherche domaine via Brave Search ────────────────────────────────
+function BraveSearchBtn({ company, onDomainFound }) {
+  const [status, setStatus] = useState('idle') // idle | loading | done | error
+
+  async function handleSearch() {
+    setStatus('loading')
+    try {
+      const res = await fetch('/api/brave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: company.name, canton: company.canton }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      if (data.domain) {
+        onDomainFound(data.domain)
+        setStatus('done')
+      } else {
+        setStatus('error')
+      }
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  if (status === 'done')    return null
+  if (status === 'loading') return <span className="enrich-status">🔍…</span>
+  if (status === 'error')   return <span className="badge badge--red" title="Introuvable">?</span>
+  return (
+    <button className="btn-brave" onClick={handleSearch} title="Trouver le site web via Brave Search">
+      🌐
+    </button>
+  )
+}
 
 // ─── Ligne enrichissement LinkedIn (NinjaPear) ────────────────────────────────
 function LinkedInRow({ domain, segment, companyName }) {
@@ -226,6 +261,12 @@ export default function ContactTable({ companies, segment }) {
   const [selected, setSelected]   = useState(new Set())
   const [expanded, setExpanded]   = useState(new Set())
   const [pushingAll, setPushingAll] = useState(false)
+  // Domaines trouvés via Brave (uid → domain)
+  const [foundDomains, setFoundDomains] = useState({})
+
+  const handleDomainFound = useCallback((uid, domain) => {
+    setFoundDomains((prev) => ({ ...prev, [uid]: domain }))
+  }, [])
 
   function toggleSelect(uid) {
     setSelected((prev) => { const n = new Set(prev); n.has(uid) ? n.delete(uid) : n.add(uid); return n })
@@ -284,9 +325,8 @@ export default function ContactTable({ companies, segment }) {
         <tbody>
           {companies.map((c) => {
             const key = c.uid || c.name
-            const domain = c.website
-              ? new URL(c.website).hostname.replace('www.', '')
-              : null
+            const domain = foundDomains[key]
+              ?? (c.website ? new URL(c.website).hostname.replace('www.', '') : null)
             const isExpanded = expanded.has(key)
 
             return (
@@ -295,13 +335,18 @@ export default function ContactTable({ companies, segment }) {
                   <td><input type="checkbox" checked={selected.has(key)} onChange={() => toggleSelect(key)} /></td>
                   <td>
                     <span className="company-name">
-                      {c.website ? (
+                      {domain ? (
+                        <a href={`https://${domain}`} target="_blank" rel="noreferrer">{c.name}</a>
+                      ) : c.website ? (
                         <a href={c.website} target="_blank" rel="noreferrer">{c.name}</a>
                       ) : c.excerptUrl ? (
                         <a href={c.excerptUrl} target="_blank" rel="noreferrer">{c.name}</a>
                       ) : c.name}
                     </span>
-                    {domain && <span className="domain-tag">{domain}</span>}
+                    {domain
+                      ? <span className="domain-tag">{domain}</span>
+                      : <BraveSearchBtn company={c} onDomainFound={(d) => handleDomainFound(key, d)} />
+                    }
                   </td>
                   <td>{c.legalForm}</td>
                   <td>{c.canton ?? '—'}</td>

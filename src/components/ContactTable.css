@@ -79,6 +79,21 @@
 .badge--red   { background: #fde8e8; color: var(--red); }
 
 /* ── Bouton HubSpot company ── */
+/* ── Bouton Brave Search (trouver domaine) ── */
+.btn-brave {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 2px 6px;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-brave:hover {
+  background: var(--bg-hover, #f0f0f0);
+}
+
 .btn-hubspot {
   background: #ff7a59;
   color: #fff;
