@@ -46,10 +46,10 @@ export const SEGMENT_KEYWORDS = {
     'office notarial', 'étude notariale',
   ],
   conseil_fiscal: [
-    'tax', 'fiscal', 'steuerberatung', 'steuerberater',
+    'fiscal', 'steuerberatung', 'steuerberater', 'steuerberatungs',
     'conseil fiscal', 'conseiller fiscal',
-    'tax advisory', 'tax consulting', 'tax & legal',
-    'fiscalité', 'impôts', 'fiscalis',
+    'tax advisory', 'tax consulting', 'tax & legal', 'taxation',
+    'fiscalité', 'fiscalis', 'steuerkanzlei', 'treuhand steuer',
   ],
   banque_cantonale: [
     'banque cantonale', 'kantonalbank',
@@ -87,8 +87,9 @@ const SEGMENT_NAME_FILTER = {
     'office notarial', 'étude notariale',
   ],
   conseil_fiscal: [
-    'fiscal', 'fisc', 'steuerberatung', 'steuerberater', 'tax',
-    'fiscalité', 'impôt', 'conseil fiscal', 'tax advisory',
+    'fiscal', 'fisc', 'steuerberatung', 'steuerberater', 'steuerberatungs',
+    'fiscalité', 'conseil fiscal', 'tax advisory', 'taxation',
+    'steuerkanzlei', 'treuhand steuer',
   ],
   banque_cantonale: [
     'cantonale', 'kantonalbank',
