@@ -23,140 +23,135 @@ const SEGMENT_LABELS = {
   conseil_fiscal:       'Conseils fiscaux',
 }
 
-// ─── Templates email par segment ─────────────────────────────────────────────
+// ─── Templates email par segment (v2 — positionnement Seerius) ───────────────
 const TEMPLATES = {
-  fiduciaire: `Objet : Collaboration M&A — Seerius x [Nom fiduciaire]
+  banque_cantonale: `Objet : Partenaire sur les successions de PME — Seerius x [Nom banque]
 
 Madame, Monsieur,
 
-En tant que fiduciaire, vous êtes souvent le premier à accompagner vos clients dans des moments clés — notamment lorsqu'un dirigeant envisage une transmission ou une cession.
+Vos équipes PME sont souvent les premières informées qu'un dirigeant envisage de transmettre ou céder son entreprise. C'est précisément là que Seerius intervient.
 
-Seerius est une boutique M&A suisse spécialisée dans l'accompagnement des PME lors de cessions, acquisitions et levées de fonds. Nous intervenons en amont de la transaction et travaillons en étroite collaboration avec les conseils de nos clients.
+Nous sommes une société d'investissement spécialisée dans les PME suisses et européennes en succession familiale. Notre particularité : après chaque acquisition, nos équipes auditent les processus de l'entreprise, identifient les vrais leviers de productivité et les déploient — avec le support d'outils d'intelligence artificielle là où c'est pertinent. L'objectif est une amélioration mesurable de l'EBITDA, pas une promesse de disruption.
 
-Nous serions ravis d'explorer comment nous pouvons nous référer mutuellement des opportunités au bénéfice de vos clients.
+Ce serait un plaisir d'échanger 20 minutes sur comment nous pouvons collaborer sur ces dossiers.
 
-Seriez-vous disponible pour un échange de 20 minutes ?
+[Prénom Nom] — Seerius`,
 
-Cordialement,
-[Votre nom] — Seerius`,
-
-  avocat: `Objet : Partenariat M&A — Seerius x [Nom cabinet]
+  banque_privee: `Objet : Dealflow PME suisses — Seerius x [Nom banque]
 
 Madame, Monsieur,
 
-Votre cabinet intervient régulièrement dans des opérations de cession et d'acquisition d'entreprises en Suisse. Seerius accompagne les cédants et acquéreurs en amont : valorisation, structuration, identification de contreparties.
+Certains de vos clients entrepreneurs envisagent de céder leur entreprise. Avant qu'ils arrivent chez vous avec leur liquidité, il y a une phase que nous gérons : la préparation et la transaction.
 
-Nous cherchons à nouer des relations avec des avocats spécialisés M&A / corporate pour échanger sur des opportunités communes.
+Seerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Ce qui nous distingue du capital-investissement traditionnel : nos équipes s'impliquent directement dans chaque participation après acquisition — audit des processus, identification des gains de productivité, déploiement d'outils IA là où ils créent de la valeur réelle. Pas du capital passif.
 
-Seriez-vous disponible pour un café ou un appel de 20 minutes ?
+Un café pour voir comment nous pouvons nous référer mutuellement ?
 
-Cordialement,
-[Votre nom] — Seerius`,
+[Prénom Nom] — Seerius`,
 
-  notaire: `Objet : Collaboration transmissions — Seerius x [Nom étude]
-
-Madame, Monsieur,
-
-Les transmissions d'entreprises passent souvent par votre étude pour leur formalisation. Seerius intervient en amont pour préparer et structurer ces transactions.
-
-Nous serions heureux d'explorer une collaboration sur des dossiers communs, pour le bénéfice de vos clients.
-
-Seriez-vous disponible pour un échange de 20 minutes ?
-
-Cordialement,
-[Votre nom] — Seerius`,
-
-  banque_privee: `Objet : Opportunités post-cession — Seerius x [Nom banque]
+  banque_affaires: `Objet : Dossiers de cession PME — Seerius x [Nom banque]
 
 Madame, Monsieur,
 
-Vos clients entrepreneurs qui cèdent leur entreprise cherchent souvent, dans un second temps, un accompagnement patrimonial. Seerius les accompagne dans la phase de cession et peut vous les présenter au moment opportun.
+Seerius investit dans des PME suisses et européennes en succession familiale. Notre approche est opérationnelle : après acquisition, nos équipes travaillent directement avec le management pour auditer les processus, identifier les leviers de productivité et les concrétiser — avec des outils d'intelligence artificielle là où ils améliorent réellement l'EBITDA.
 
-À l'inverse, certains de vos clients patrimoniaux recherchent des opportunités d'investissement dans des PME suisses. Nous pouvons vous tenir informés de nos mandats actifs.
+Nous cherchons des partenaires avec qui travailler dans la durée sur des mandats complémentaires. Disponible 20 minutes ?
 
-Un échange serait-il possible ?
+[Prénom Nom] — Seerius`,
 
-Cordialement,
-[Votre nom] — Seerius`,
+  avocat: `Objet : Dossiers de cession PME — Seerius x [Nom cabinet]
 
-  banque_affaires: `Objet : Co-advisory M&A — Seerius x [Nom banque]
+Maître,
+
+Vous structurez les cessions. Nous les finançons et nous accompagnons les entreprises après l'acquisition. C'est une complémentarité naturelle.
+
+Seerius investit dans des PME suisses et européennes en succession familiale. Après chaque acquisition, nos équipes travaillent directement avec le management : audit des processus, refonte des workflows, déploiement d'outils d'intelligence artificielle là où ils améliorent concrètement l'EBITDA. Une approche opérationnelle, pas seulement financière.
+
+Nous cherchons des avocats M&A avec qui travailler dans la durée. Disponible 20 minutes ?
+
+[Prénom Nom] — Seerius`,
+
+  notaire: `Objet : Transmissions d'entreprises — Seerius x [Nom étude]
+
+Maître,
+
+Vous formalisez les transmissions. Certains de vos clients dirigeants s'interrogent sur leur succession bien avant d'en parler à leur banquier ou à leur avocat. Si c'est le cas, nous pouvons intervenir très en amont.
+
+Seerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Notre approche est opérationnelle : après acquisition, nos équipes auditent les processus de chaque entreprise, identifient les leviers de productivité et les concrétisent — avec le support de l'intelligence artificielle là où elle apporte une vraie valeur.
+
+Un échange de 20 minutes pour se connaître ?
+
+[Prénom Nom] — Seerius`,
+
+  fiduciaire: `Objet : Vos clients cédants — Seerius x [Nom fiduciaire]
 
 Madame, Monsieur,
 
-Seerius est une boutique M&A dédiée aux PME suisses (cessions, acquisitions, levées de fonds). Nous cherchons à collaborer avec des banques d'affaires sur des mandats complémentaires — que ce soit en co-advisory ou en référencement réciproque.
+Vous êtes souvent le premier confident d'un dirigeant qui pense à transmettre son entreprise. Vous voyez les comptes, vous connaissez la réalité de l'entreprise.
 
-Seriez-vous disponible pour un échange de 20 minutes ?
+Seerius investit dans des PME suisses et européennes en succession familiale. Ce qui nous distingue : nous ne sommes pas des investisseurs passifs. Après chaque acquisition, nos équipes travaillent avec le management pour auditer les processus, identifier les gains de productivité réels et les déployer — avec des outils IA là où c'est justifié. L'objectif : une amélioration mesurable de l'EBITDA, documentée et publiée.
 
-Cordialement,
-[Votre nom] — Seerius`,
+Si vous avez des clients qui réfléchissent à leur succession, nous serions un partenaire sérieux à leur présenter. 20 minutes pour se présenter ?
+
+[Prénom Nom] — Seerius`,
+
+  conseil_fiscal: `Objet : Cessions de PME — Seerius x [Cabinet fiscal]
+
+Madame, Monsieur,
+
+La réflexion fiscale précède souvent la décision de céder. Vos clients vous posent ces questions avant d'en parler ailleurs — c'est exactement à ce stade que nous pouvons intervenir ensemble.
+
+Seerius investit dans des PME suisses et européennes en succession familiale. Notre rôle va au-delà du capital : après acquisition, nos équipes auditent les processus des entreprises, identifient les leviers de productivité et déploient des outils d'intelligence artificielle là où ils améliorent concrètement l'EBITDA. Votre expertise fiscale reste centrale dans la structuration de ces opérations.
+
+Un échange de 20 minutes pour voir comment travailler ensemble ?
+
+[Prénom Nom] — Seerius`,
 
   gestionnaire_fortune: `Objet : Opportunités PME suisses — Seerius x [Nom GFI]
 
 Madame, Monsieur,
 
-Certains de vos clients investisseurs recherchent des placements alternatifs dans l'économie réelle — notamment des participations dans des PME suisses rentables.
+Certains de vos clients cherchent des placements dans l'économie réelle — des participations dans des PME suisses solides, hors des marchés cotés.
 
-Seerius gère des mandats de cession de PME suisses et peut vous présenter des opportunités d'investissement correspondant à vos critères.
+Seerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Nous ne sommes pas des investisseurs passifs : après chaque acquisition, nos équipes s'impliquent opérationnellement pour auditer les processus, identifier les leviers de productivité et les déployer avec des outils IA là où c'est pertinent.
 
 Seriez-vous disponible pour un échange ?
 
-Cordialement,
-[Votre nom] — Seerius`,
+[Prénom Nom] — Seerius`,
 
-  asset_manager: `Objet : Opportunités PME — Seerius x [Nom AM]
-
-Madame, Monsieur,
-
-Seerius accompagne des PME suisses dans leurs opérations de cession et de levée de fonds. Nous pourrions vous présenter des opportunités correspondant à vos stratégies d'investissement.
-
-Un échange de 20 minutes serait-il possible ?
-
-Cordialement,
-[Votre nom] — Seerius`,
-
-  family_office: `Objet : Opportunités d'investissement direct — Seerius x [Family Office]
+  asset_manager: `Objet : Opportunités PME suisses et européennes — Seerius x [Nom AM]
 
 Madame, Monsieur,
 
-Vous gérez des investissements pour compte propre ou pour des familles d'entrepreneurs. Seerius peut vous proposer des opportunités d'investissement direct dans des PME suisses de qualité, en amont ou en parallèle de leur cession.
+Seerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Notre différence : après chaque acquisition, nos équipes travaillent directement avec le management — audit des processus, refonte des workflows, déploiement d'outils IA là où ils créent de la valeur réelle. Pas du capital passif.
+
+Nous pourrions échanger sur des opportunités de co-investissement correspondant à vos stratégies. Un échange de 20 minutes ?
+
+[Prénom Nom] — Seerius`,
+
+  family_office: `Objet : Investissement direct PME — Seerius x [Family Office]
+
+Madame, Monsieur,
+
+Seerius investit dans des PME suisses et européennes en succession familiale — des entreprises solides, hors des marchés cotés, avec une vraie création de valeur opérationnelle.
+
+Notre particularité : après chaque acquisition, nos équipes auditent les processus, identifient les vrais leviers de productivité et les déploient — avec des outils d'intelligence artificielle là où c'est pertinent. L'objectif est une amélioration mesurable de l'EBITDA, documentée et publiée.
 
 Seriez-vous ouverts à un échange confidentiel ?
 
-Cordialement,
-[Votre nom] — Seerius`,
+[Prénom Nom] — Seerius`,
 
   multi_family_office: `Objet : Co-investissement PME suisses — Seerius x [MFO]
 
 Madame, Monsieur,
 
-Dans le cadre de vos mandats multi-familles, vous êtes régulièrement sollicités pour des opportunités d'investissement alternatif. Seerius gère des mandats de cession de PME suisses rentables et peut vous en présenter en exclusivité.
+Seerius investit dans des PME suisses et européennes en succession familiale. Pour les familles que vous gérez, nous pouvons représenter une source d'accès à des opportunités dans l'économie réelle — avec une approche opérationnelle qui va au-delà du capital.
+
+Après chaque acquisition, nos équipes s'impliquent directement : audit des processus, identification des gains de productivité, déploiement d'outils IA là où ils améliorent l'EBITDA. Une création de valeur mesurable et documentée.
 
 Seriez-vous disponible pour un échange ?
 
-Cordialement,
-[Votre nom] — Seerius`,
-
-  fiduciaire_default: `Objet : Collaboration M&A — Seerius
-
-Madame, Monsieur,
-
-Seerius accompagne des entrepreneurs suisses dans leurs projets de transmission et d'acquisition. Nous serions ravis d'explorer une collaboration pour le bénéfice de vos clients.
-
-Cordialement,
-[Votre nom] — Seerius`,
-
-  conseil_fiscal: `Objet : Collaboration transmissions — Seerius x [Cabinet fiscal]
-
-Madame, Monsieur,
-
-Les transmissions d'entreprises ont souvent des enjeux fiscaux significatifs pour vos clients. Seerius intervient en amont pour structurer et préparer ces transactions, en coordination avec les conseils fiscaux.
-
-Nous serions heureux d'explorer une collaboration sur des dossiers communs.
-
-Seriez-vous disponible pour un échange de 20 minutes ?
-
-Cordialement,
-[Votre nom] — Seerius`,
+[Prénom Nom] — Seerius`,
 }
 
 function getTemplate(segmentId) {
