@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
+import { JURIDIQUE_SEGMENTS, OUTREACH_ID, addTargets } from '../services/outreach.js'
 import './ContactTable.css'
 
 // Templates d'email par segment (tâche HubSpot — v2 positionnement Seerius)
@@ -38,7 +39,7 @@ const STATUT_STYLE = {
   'Partenaire': { background: 'var(--green-light)', color: 'var(--green)', border: '1px solid var(--green)' },
 }
 
-function StatusSelect({ value, onChange }) {
+export function StatusSelect({ value, onChange }) {
   return (
     <select
       className="statut-select"
@@ -344,7 +345,7 @@ function HubSpotButton({ company, segment }) {
 }
 
 // ─── Tableau principal ────────────────────────────────────────────────────────
-export default function ContactTable({ companies, segment }) {
+export default function ContactTable({ companies, segment, onNavigate }) {
   const [selected, setSelected]     = useState(new Set())
   const [expanded, setExpanded]     = useState(new Set())
   const [pushingAll, setPushingAll] = useState(false)
@@ -493,6 +494,23 @@ export default function ContactTable({ companies, segment }) {
       setTaskResult({ created: 0, errors: tasks.length })
     }
     setCreatingTasks(false)
+  }
+
+  const [campaignResult, setCampaignResult] = useState(null) // { added, total }
+
+  function addSelectedToCampaign() {
+    const targets = filtered.filter((c) => selected.has(c._key))
+    const added = addTargets(targets.map((c) => ({
+      segment,
+      key:          c._key,
+      name:         c.name,
+      domain:       foundDomains[c._key] ?? c._domain,
+      canton:       c._zefix.canton ?? c.canton,
+      municipality: c.municipality,
+      uid:          c._zefix.uid ?? c.uid,
+      decideurs:    linkedinData[c._key],
+    })))
+    setCampaignResult({ added, total: targets.length })
   }
 
   async function enrichSelected() {
@@ -695,6 +713,24 @@ export default function ContactTable({ companies, segment }) {
           >
             {creatingTasks ? '📋 Création…' : `📋 Tâches HubSpot (${selected.size})`}
           </button>
+          {JURIDIQUE_SEGMENTS[segment] && (
+            <button
+              className="btn-bulk-campaign"
+              onClick={addSelectedToCampaign}
+              title="Ajoute les cabinets sélectionnés (et leurs décideurs LinkedIn) à la campagne email Juridique & Fiscal"
+            >
+              ✉️ Campagne ({selected.size})
+            </button>
+          )}
+          {campaignResult && (
+            <span className="task-result">
+              ✓ {campaignResult.added} ajouté{campaignResult.added !== 1 ? 's' : ''}
+              {campaignResult.total > campaignResult.added ? ` · ${campaignResult.total - campaignResult.added} déjà présent(s)` : ''}
+              {onNavigate && (
+                <button className="btn-open-campaign" onClick={() => onNavigate(OUTREACH_ID)}>Ouvrir la campagne →</button>
+              )}
+            </span>
+          )}
           {taskResult && (
             <span className="task-result">
               ✓ {taskResult.created} tâche{taskResult.created !== 1 ? 's' : ''} créée{taskResult.created !== 1 ? 's' : ''}

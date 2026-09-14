@@ -114,7 +114,7 @@ function detectCantonFromUrl(url) {
   return null
 }
 
-export default function SegmentPanel({ segment }) {
+export default function SegmentPanel({ segment, onNavigate }) {
   const [cantons, setCantons] = useState([])
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
@@ -226,7 +226,7 @@ export default function SegmentPanel({ segment }) {
       <ZefixDirectSearch onAdd={addManual} />
 
       {results.length > 0 && (
-        <ContactTable companies={results} segment={segment.id} />
+        <ContactTable companies={results} segment={segment.id} onNavigate={onNavigate} />
       )}
 
       {searched && !loading && results.length === 0 && !error && (

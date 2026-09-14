@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { OUTREACH_ID } from '../services/outreach.js'
 import './CampaignPanel.css'
 
 const STATUTS = ['Non contacté', 'Contacté', 'RDV', 'Partenaire']
@@ -198,6 +199,11 @@ export default function CampaignPanel({ onNavigate }) {
           <p className="campaign-sub">Suivez votre pipeline relationnel et accédez aux templates par segment.</p>
         </div>
       </div>
+
+      <button className="campaign-outreach-cta" onClick={() => onNavigate(OUTREACH_ID)}>
+        <span>✉️ <strong>Campagne email Juridique &amp; Fiscal</strong> — emails personnalisés aux avocats, notaires, fiduciaires et conseils fiscaux, envoyés via HubSpot</span>
+        <span>Ouvrir →</span>
+      </button>
 
       {/* ── Templates par segment ── */}
       <div className="templates-section">

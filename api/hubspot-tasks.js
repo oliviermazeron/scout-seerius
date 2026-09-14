@@ -1,15 +1,25 @@
 // ─── Création de tâches HubSpot (email à envoyer) ────────────────────────────
 // POST /api/hubspot-tasks
-// Body: { tasks: [{ companyName, contactName, template, companyId?, contactId? }] }
+// Body: { tasks: [{ companyName, contactName, template, companyId?, contactId?, subject?, dueInDays? }] }
 //
 // Utilise l'API Engagements v1 (legacy) — compatible avec les tokens pat-eu1-*
 // sans scope tasks supplémentaire.
 
 const HS_ENGAGE = 'https://api.hubapi.com/engagements/v1/engagements'
+const DAY_MS = 24 * 60 * 60 * 1000
 
-async function createTask(token, { companyName, contactName, template, companyId, contactId }) {
-  const subject = `📧 Email — ${companyName}${contactName ? ' · ' + contactName : ''}`
-  const dueDate = Date.now() + 2 * 24 * 60 * 60 * 1000 // +2 jours en ms
+// Le corps de tâche HubSpot est du HTML : on préserve les retours à la ligne du modèle
+function textToHtml(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>')
+}
+
+async function createTask(token, { companyName, contactName, template, companyId, contactId, subject: customSubject, dueInDays = 2 }) {
+  const subject = customSubject ?? `📧 Email — ${companyName}${contactName ? ' · ' + contactName : ''}`
+  const dueDate = Date.now() + Number(dueInDays) * DAY_MS
 
   const body = {
     engagement: {
@@ -26,7 +36,7 @@ async function createTask(token, { companyName, contactName, template, companyId
     },
     metadata: {
       subject,
-      body:     template,
+      body:     textToHtml(template),
       status:   'NOT_STARTED',
       taskType: 'EMAIL',
       priority: 'MEDIUM',

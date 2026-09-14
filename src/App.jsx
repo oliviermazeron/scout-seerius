@@ -4,6 +4,8 @@ import SegmentPanel from './components/SegmentPanel.jsx'
 import SynthesisPanel from './components/SynthesisPanel.jsx'
 import DealPanel from './components/DealPanel.jsx'
 import CampaignPanel from './components/CampaignPanel.jsx'
+import OutreachPanel from './components/OutreachPanel.jsx'
+import { OUTREACH_ID } from './services/outreach.js'
 
 const SEGMENTS = [
   {
@@ -99,7 +101,8 @@ const SEGMENTS = [
 const GROUPS = [
   { id: 'banques',   label: '🏦 Banques',             desc: 'Cantonales · Privées · D\'affaires' },
   { id: 'gestion',   label: '💼 Gestion de patrimoine', desc: 'GFI · Asset Managers · Family Offices' },
-  { id: 'juridique', label: '⚖️ Juridique & Fiscal',   desc: 'Avocats · Notaires · Fiduciaires · Conseils' },
+  { id: 'juridique', label: '⚖️ Juridique & Fiscal',   desc: 'Avocats · Notaires · Fiduciaires · Conseils',
+    campaign: { id: OUTREACH_ID, label: 'Campagne email', icon: '✉️' } },
 ]
 
 const SYNTHESIS_ID = '__synthesis__'
@@ -120,6 +123,7 @@ export default function App() {
   const isSynthesis = activeSegment === SYNTHESIS_ID
   const isDeals     = activeSegment === DEALS_ID
   const isCampaign  = activeSegment === CAMPAIGN_ID
+  const isOutreach  = activeSegment === OUTREACH_ID
   const isSegment   = !!segment
 
   function navigate(id) {
@@ -144,7 +148,9 @@ export default function App() {
   }
 
   // current group label for breadcrumb
-  const activeGroup = segment ? GROUPS.find(g => g.id === segment.group) : null
+  const activeGroup = segment
+    ? GROUPS.find(g => g.id === segment.group)
+    : GROUPS.find(g => g.campaign?.id === activeSegment) ?? null
 
   return (
     <div className="app">
@@ -262,7 +268,7 @@ export default function App() {
           {GROUPS.map(g => {
             const segs = SEGMENTS.filter(s => s.group === g.id)
             const isOpen = openGroups[g.id]
-            const hasActive = segs.some(s => s.id === activeSegment)
+            const hasActive = segs.some(s => s.id === activeSegment) || g.campaign?.id === activeSegment
             return (
               <div key={g.id} className={`sidebar-group ${hasActive ? 'sidebar-group--active' : ''}`}>
                 <button
@@ -275,6 +281,15 @@ export default function App() {
                 <div className="sidebar-group-desc">{g.desc}</div>
                 {(isOpen || hasActive) && (
                   <div className="sidebar-items">
+                    {g.campaign && (
+                      <button
+                        className={`sidebar-item sidebar-item--campaign ${activeSegment === g.campaign.id ? 'active' : ''}`}
+                        onClick={() => setActiveSegment(g.campaign.id)}
+                      >
+                        <span className="sidebar-item-icon">{g.campaign.icon}</span>
+                        <span className="sidebar-item-label">{g.campaign.label}</span>
+                      </button>
+                    )}
                     {segs.map(s => (
                       <button
                         key={s.id}
@@ -295,20 +310,23 @@ export default function App() {
         {/* ── MAIN ── */}
         <main className="main">
           {/* Breadcrumb */}
-          {isSegment && (
+          {(isSegment || isOutreach) && (
             <div className="breadcrumb">
               <button className="breadcrumb-home" onClick={() => setActiveSegment(SYNTHESIS_ID)}>Accueil</button>
               <span className="breadcrumb-sep">›</span>
               {activeGroup && <span className="breadcrumb-group">{activeGroup.label}</span>}
               <span className="breadcrumb-sep">›</span>
-              <span className="breadcrumb-current">{segment.icon} {segment.label}</span>
+              <span className="breadcrumb-current">
+                {isSegment ? `${segment.icon} ${segment.label}` : `${activeGroup.campaign.icon} ${activeGroup.campaign.label}`}
+              </span>
             </div>
           )}
 
           {isSynthesis && <SynthesisPanel onNavigate={navigate} />}
           {isDeals     && <DealPanel      onNavigate={navigate} />}
           {isCampaign  && <CampaignPanel  onNavigate={navigate} />}
-          {isSegment   && <SegmentPanel   segment={segment} />}
+          {isOutreach  && <OutreachPanel  onNavigate={navigate} />}
+          {isSegment   && <SegmentPanel   segment={segment} onNavigate={navigate} />}
         </main>
       </div>
 
