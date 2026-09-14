@@ -110,8 +110,15 @@ function ZefixLookupBtn({ company, onFound }) {
 }
 
 // ─── Bouton recherche domaine via Brave Search ────────────────────────────────
+function cleanDomain(input) {
+  const d = String(input ?? '').trim().toLowerCase()
+    .replace(/^https?:\/\//, '').replace(/^www\./, '').split(/[/?#\s]/)[0]
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(d) ? d : null
+}
+
 function BraveSearchBtn({ company, onDomainFound }) {
   const [status, setStatus] = useState('idle')
+  const [candidates, setCandidates] = useState([])
 
   async function handleSearch() {
     setStatus('loading')
@@ -119,18 +126,38 @@ function BraveSearchBtn({ company, onDomainFound }) {
       const res = await fetch('/api/brave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: company.name, canton: company.canton }),
+        body: JSON.stringify({ name: company.name, canton: company.canton, municipality: company.municipality }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       if (data.domain) { onDomainFound(data.domain); setStatus('done') }
-      else setStatus('error')
+      else { setCandidates(data.candidates ?? []); setStatus('notfound') }
     } catch { setStatus('error') }
+  }
+
+  // Aucun site confirmé : choix parmi les résultats Brave ou saisie manuelle
+  function pickManually() {
+    const list = candidates.map((c, i) => `${i + 1}. ${c.domain} — ${c.title ?? ''}`).join('\n')
+    const answer = window.prompt(
+      `Aucun site ne correspond clairement à « ${company.name} ».\n\n` +
+      (list ? `Résultats Brave non confirmés :\n${list}\n\nTapez un numéro, ou saisissez le domaine :` : 'Saisissez le domaine (ex. cabinet.ch) :'),
+    )
+    if (answer == null) return
+    const n = Number(answer.trim())
+    const domain = Number.isInteger(n) && candidates[n - 1] ? candidates[n - 1].domain : cleanDomain(answer)
+    if (!domain) return
+    onDomainFound(domain)
+    setStatus('done')
   }
 
   if (status === 'done')    return null
   if (status === 'loading') return <span className="enrich-status">🔍…</span>
-  if (status === 'error')   return <span className="badge badge--red" title="Introuvable">?</span>
+  if (status === 'error')   return <button className="btn-brave-pick" onClick={handleSearch} title="Erreur Brave Search — cliquer pour réessayer">! réessayer</button>
+  if (status === 'notfound') return (
+    <button className="btn-brave-pick" onClick={pickManually} title="Aucun site ne correspond au nom — choisir parmi les résultats ou saisir le domaine">
+      ? choisir
+    </button>
+  )
   return (
     <button className="btn-brave" onClick={handleSearch} title="Trouver le site web via Brave Search">
       🌐
@@ -543,7 +570,7 @@ export default function ContactTable({ companies, segment, onNavigate }) {
           const r = await fetch('/api/brave', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: c.name, canton: c.canton }),
+            body: JSON.stringify({ name: c.name, canton: c.canton, municipality: c.municipality }),
           })
           const d = await r.json()
           if (d.domain) handleDomainFound(c._key, d.domain)
