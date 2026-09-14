@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { saveShared } from '../services/store.js'
+import CantonPicker from './CantonPicker.jsx'
 import './DealPanel.css'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -82,23 +83,11 @@ function saveDeals(deals) {
   saveShared('scout_deals', deals)
 }
 
-const ALL_CANTONS = [
-  'AG','AI','AR','BE','BL','BS','FR','GE','GL','GR',
-  'JU','LU','NE','NW','OW','SG','SH','SO','SZ','TG',
-  'TI','UR','VD','VS','ZG','ZH',
-]
-
 // ─── Formulaire de création / édition ────────────────────────────────────────
 function DealForm({ initial, onSave, onCancel }) {
   const [deal, setDeal] = useState(initial ?? newDeal())
 
   function set(key, val) { setDeal((d) => ({ ...d, [key]: val })) }
-  function toggleCanton(c) {
-    setDeal((d) => ({
-      ...d,
-      cantons: d.cantons.includes(c) ? d.cantons.filter((x) => x !== c) : [...d.cantons, c],
-    }))
-  }
 
   function handleSave() {
     if (!deal.name.trim()) return
@@ -149,17 +138,7 @@ function DealForm({ initial, onSave, onCancel }) {
 
       <div className="deal-form-row">
         <label>Cantons concernés</label>
-        <div className="canton-grid-sm">
-          {ALL_CANTONS.map((c) => (
-            <button
-              key={c}
-              className={`canton-btn-sm ${deal.cantons.includes(c) ? 'canton-btn-sm--on' : ''}`}
-              onClick={() => toggleCanton(c)}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
+        <CantonPicker value={deal.cantons} onChange={(cantons) => set('cantons', cantons)} />
       </div>
 
       <div className="deal-form-row deal-form-row--inline">
