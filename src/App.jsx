@@ -6,6 +6,13 @@ import DealPanel from './components/DealPanel.jsx'
 import CampaignPanel from './components/CampaignPanel.jsx'
 import OutreachPanel from './components/OutreachPanel.jsx'
 import { OUTREACH_ID } from './services/outreach.js'
+import { useStoreStatus } from './services/store.js'
+
+const STORE_STATUS = {
+  cloud: { label: '☁️ Synchronisé', title: 'Données partagées enregistrées dans la base SCOUT' },
+  local: { label: '💾 Local', title: 'Base partagée indisponible : les données restent dans ce navigateur' },
+  error: { label: '⚠️ Synchro en attente', title: "Échec d'enregistrement dans la base, nouvel essai automatique" },
+}
 
 const SEGMENTS = [
   {
@@ -118,6 +125,7 @@ export default function App() {
     () => localStorage.getItem(NOTICE_KEY) === '1'
   )
   const [showGuide, setShowGuide] = useState(false)
+  const storeStatus = STORE_STATUS[useStoreStatus()]
 
   const segment    = SEGMENTS.find((s) => s.id === activeSegment)
   const isSynthesis = activeSegment === SYNTHESIS_ID
@@ -167,6 +175,9 @@ export default function App() {
             </div>
           </div>
           <div className="header-right">
+            {storeStatus && (
+              <span className="store-status" title={storeStatus.title}>{storeStatus.label}</span>
+            )}
             <p className="header-tagline">600 000 entités indexées · 26 cantons</p>
             {!noticeDismissed ? (
               <button className="btn-notice-hide" onClick={dismissNotice} title="Masquer la notice">

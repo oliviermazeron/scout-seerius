@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { saveShared } from '../services/store.js'
 import './DealPanel.css'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -78,7 +79,7 @@ function readDeals() {
   try { return JSON.parse(localStorage.getItem('scout_deals') ?? '[]') } catch { return [] }
 }
 function saveDeals(deals) {
-  try { localStorage.setItem('scout_deals', JSON.stringify(deals)) } catch {}
+  saveShared('scout_deals', deals)
 }
 
 const ALL_CANTONS = [

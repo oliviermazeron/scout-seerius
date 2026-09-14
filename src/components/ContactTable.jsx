@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 import { JURIDIQUE_SEGMENTS, OUTREACH_ID, addTargets } from '../services/outreach.js'
+import { saveShared } from '../services/store.js'
 import './ContactTable.css'
 
 // Templates d'email par segment (tâche HubSpot — v2 positionnement Seerius)
@@ -363,7 +364,7 @@ export default function ContactTable({ companies, segment, onNavigate }) {
   const handleZefixFound = useCallback((uid, data) => {
     setZefixData((prev) => {
       const next = { ...prev, [uid]: data }
-      try { localStorage.setItem(`scout_zefix_${segment}`, JSON.stringify(next)) } catch {}
+      saveShared(`scout_zefix_${segment}`, next)
       return next
     })
   }, [segment])
@@ -374,7 +375,7 @@ export default function ContactTable({ companies, segment, onNavigate }) {
   const handleDomainFound = useCallback((uid, domain) => {
     setFoundDomains((prev) => {
       const next = { ...prev, [uid]: domain }
-      try { localStorage.setItem(`scout_domains_${segment}`, JSON.stringify(next)) } catch {}
+      saveShared(`scout_domains_${segment}`, next)
       return next
     })
   }, [segment])
@@ -385,7 +386,7 @@ export default function ContactTable({ companies, segment, onNavigate }) {
   const handleLinkedinFound = useCallback((uid, employees) => {
     setLinkedinData((prev) => {
       const next = { ...prev, [uid]: employees }
-      try { localStorage.setItem(`scout_linkedin_${segment}`, JSON.stringify(next)) } catch {}
+      saveShared(`scout_linkedin_${segment}`, next)
       return next
     })
   }, [segment])
@@ -399,7 +400,7 @@ export default function ContactTable({ companies, segment, onNavigate }) {
       const next = { ...prev }
       if (!statut) delete next[campaignKey]
       else next[campaignKey] = statut
-      try { localStorage.setItem('scout_campaign', JSON.stringify(next)) } catch {}
+      saveShared('scout_campaign', next)
       return next
     })
   }, [segment])

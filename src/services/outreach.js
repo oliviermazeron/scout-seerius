@@ -3,6 +3,9 @@
 // et modèles d'emails personnalisés — persistés en localStorage.
 // Le statut relationnel partage la clé `scout_campaign` (même format
 // "segmentId:companyKey") que les tableaux et l'onglet Campagnes.
+// Cibles et statuts sont partagés (store.js) ; la signature reste propre au navigateur.
+
+import { saveShared } from './store.js'
 
 export const OUTREACH_ID = '__outreach_juridique__'
 
@@ -26,7 +29,7 @@ function writeJSON(key, value) {
 
 // ─── Cibles ───────────────────────────────────────────────────────────────────
 export const readTargets  = () => readJSON(TARGETS_KEY, {})
-export const writeTargets = (targets) => writeJSON(TARGETS_KEY, targets)
+export const writeTargets = (targets) => saveShared(TARGETS_KEY, targets)
 
 // list: [{ segment, key, name, domain, canton, municipality, uid, decideurs }]
 // Retourne le nombre de nouvelles cibles (les existantes sont rafraîchies).
@@ -56,7 +59,7 @@ export function setPipelineStatus(id, statut) {
   const pipeline = readPipeline()
   if (!statut) delete pipeline[id]
   else pipeline[id] = statut
-  writeJSON(PIPELINE_KEY, pipeline)
+  saveShared(PIPELINE_KEY, pipeline)
   return pipeline
 }
 

@@ -80,6 +80,15 @@
   letter-spacing: .01em;
   font-style: italic;
 }
+.store-status {
+  font-size: 11px;
+  color: rgba(255,255,255,.7);
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 5px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
 .btn-notice-hide {
   font-size: 11px;
   color: rgba(255,255,255,.35);
