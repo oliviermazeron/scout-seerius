@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
-  JURIDIQUE_SEGMENTS, readTargets, writeTargets, readSender, writeSender,
-  readPipeline, setPipelineStatus, buildEmail, buildFollowUp,
+  JURIDIQUE_SEGMENTS, OBJECTIVES, DEAL_CRITERIA_FIELDS, readTargets, writeTargets, readSender, writeSender,
+  readSettings, writeSettings, readPipeline, setPipelineStatus, buildEmail, buildFollowUp,
 } from '../services/outreach.js'
 import { StatusSelect } from './ContactTable.jsx'
 import './OutreachPanel.css'
@@ -23,7 +23,7 @@ async function postJSON(url, body) {
 }
 
 // ─── Panneau d'édition d'une cible (destinataire + email) ────────────────────
-function TargetEditor({ t, email, hunter, pushState, followUp, onNavigate,
+function TargetEditor({ t, email, edited, hunter, pushState, followUp, onNavigate,
   onSearchDomain, onFindPerson, onChoose, onDraft, onPush }) {
   const [manual, setManual] = useState(() => ({
     firstName: t.contact?.firstName ?? '',
@@ -137,7 +137,7 @@ function TargetEditor({ t, email, hunter, pushState, followUp, onNavigate,
 
       {/* ── 2. Email ── */}
       <div className="op-editor-col">
-        <div className="op-editor-title">2 · Email {t.draft && <span className="op-edited">modifié</span>}</div>
+        <div className="op-editor-title">2 · Email {edited && <span className="op-edited">modifié</span>}</div>
         <label className="op-field-label" htmlFor={`subject-${t.id}`}>Objet</label>
         <input
           id={`subject-${t.id}`}
@@ -153,7 +153,7 @@ function TargetEditor({ t, email, hunter, pushState, followUp, onNavigate,
         />
         <div className="op-editor-actions">
           <button className="op-btn-light" onClick={copy}>{copied ? '✓ Copié' : '📋 Copier'}</button>
-          {t.draft && <button className="op-btn-light" onClick={() => onDraft(t, null)}>↺ Revenir au modèle</button>}
+          {edited && <button className="op-btn-light" onClick={() => onDraft(t, null)}>↺ Revenir au modèle</button>}
           <span className="op-spacer" />
           <PushButton t={t} state={pushState} onPush={onPush} />
         </div>
@@ -189,6 +189,7 @@ export default function OutreachPanel({ onNavigate }) {
   const [targets, setTargets]           = useState(readTargets)
   const [pipeline, setPipeline]         = useState(readPipeline)
   const [sender, setSender]             = useState(readSender)
+  const [settings, setSettings]         = useState(readSettings)
   const [segFilter, setSegFilter]       = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [selected, setSelected]         = useState(new Set())
@@ -246,10 +247,22 @@ export default function OutreachPanel({ onNavigate }) {
     })
   }
 
+  function updateSettings(update) {
+    setSettings((prev) => {
+      const next = update(prev)
+      writeSettings(next)
+      return next
+    })
+  }
+  const setObjective = (objective) => updateSettings((s) => ({ ...s, objective }))
+  const setCriterion = (field, value) => updateSettings((s) => ({ ...s, criteria: { ...s.criteria, [field]: value } }))
+
   const changeStatus = (id, statut) => setPipeline(setPipelineStatus(id, statut))
   const chooseContact = (t, contact) => updateTarget(t.id, { contact, draft: null })
-  const setDraft = (t, draft) => updateTarget(t.id, { draft })
-  const emailFor = (t) => t.draft ?? buildEmail(t, t.contact, sender)
+  // Un brouillon modifié n'est valable que pour l'objectif avec lequel il a été rédigé
+  const isEdited = (t) => t.draft?.objective === settings.objective
+  const setDraft = (t, draft) => updateTarget(t.id, { draft: draft && { ...draft, objective: settings.objective } })
+  const emailFor = (t) => (isEdited(t) ? t.draft : buildEmail(t, t.contact, sender, settings))
 
   function toggleSelect(id) {
     setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -310,16 +323,17 @@ export default function OutreachPanel({ onNavigate }) {
 
       const who = fullName(c) || c.email
       const email = emailFor(t)
+      const objective = OBJECTIVES[settings.objective].label
       const tasks = [{
         companyName: t.name, contactName: who, companyId, contactId, dueInDays: 0,
-        subject: `✉️ ${JURIDIQUE_SEGMENTS[t.segment].short} — ${who} · ${t.name}`,
+        subject: `✉️ ${objective} · ${JURIDIQUE_SEGMENTS[t.segment].short} — ${who} · ${t.name}`,
         template: `Objet : ${email.subject}\n\n${email.body}`,
       }]
       if (followUp) {
-        const f = buildFollowUp(t, c, sender, email.subject)
+        const f = buildFollowUp(t, c, sender, email.subject, settings)
         tasks.push({
           companyName: t.name, contactName: who, companyId, contactId, dueInDays: 7,
-          subject: `🔁 Relance J+7 — ${who} · ${t.name}`,
+          subject: `🔁 Relance J+7 · ${objective} — ${who} · ${t.name}`,
           template: `Objet : ${f.subject}\n\n${f.body}`,
         })
       }
@@ -328,7 +342,7 @@ export default function OutreachPanel({ onNavigate }) {
         throw new Error(tr.data.error ?? `${tasks.length - (tr.data.created ?? 0)} tâche(s) non créée(s)`)
       }
 
-      updateTarget(t.id, { hubspot: { pushedAt: Date.now(), contactId, companyId, followUp } })
+      updateTarget(t.id, { hubspot: { pushedAt: Date.now(), contactId, companyId, followUp, objective: settings.objective } })
       if (!readPipeline()[t.id]) changeStatus(t.id, 'Contacté')
       setPush((p) => ({ ...p, [t.id]: 'done' }))
       return true
@@ -355,7 +369,8 @@ export default function OutreachPanel({ onNavigate }) {
       <div className="op-header">
         <h2>✉️ Campagne email — Juridique &amp; Fiscal</h2>
         <p className="op-sub">
-          Faites connaître Seerius aux avocats, notaires, fiduciaires et conseils fiscaux, et décrochez une visio ou un rendez-vous.
+          Sollicitez les avocats, notaires, fiduciaires et conseils fiscaux pour obtenir des dossiers de PME suisses à reprendre,
+          ou pour présenter Seerius — avec une proposition de visio ou de rendez-vous.
           Chaque email est personnalisé, puis créé dans HubSpot comme tâche à envoyer depuis votre boîte connectée.
         </p>
       </div>
@@ -384,6 +399,37 @@ export default function OutreachPanel({ onNavigate }) {
           <input placeholder="Téléphone" value={sender.phone} onChange={(e) => updateSender('phone', e.target.value)} />
         </div>
         {!sender.name && <div className="op-warn">Renseignez votre nom : il remplace « [Prénom Nom] » dans tous les emails.</div>}
+      </div>
+
+      <div className="op-sender">
+        <div className="op-block-label">Objectif de la campagne</div>
+        <div className="op-objectives">
+          {Object.entries(OBJECTIVES).map(([id, o]) => (
+            <button
+              key={id}
+              className={`op-objective ${settings.objective === id ? 'op-objective--on' : ''}`}
+              onClick={() => setObjective(id)}
+            >
+              <strong>{o.label}</strong>
+              <span>{o.desc}</span>
+            </button>
+          ))}
+        </div>
+        {settings.objective === 'dealflow' && (
+          <>
+            <div className="op-criteria">
+              {DEAL_CRITERIA_FIELDS.map((f) => (
+                <label key={f.id} className="op-criterion">
+                  <span>{f.label}</span>
+                  <input value={settings.criteria[f.id]} onChange={(e) => setCriterion(f.id, e.target.value)} />
+                </label>
+              ))}
+            </div>
+            <div className="op-warn">
+              Ces critères d'acquisition figurent dans chaque email deal flow : validez-les avant de créer les tâches. Ils sont partagés avec l'équipe.
+            </div>
+          </>
+        )}
       </div>
 
       {all.length === 0 ? (
@@ -505,6 +551,7 @@ export default function OutreachPanel({ onNavigate }) {
                             key={`${t.id}-${t.contact?.email ?? ''}`}
                             t={t}
                             email={emailFor(t)}
+                            edited={isEdited(t)}
                             hunter={hunter}
                             pushState={push[t.id]}
                             followUp={followUp}

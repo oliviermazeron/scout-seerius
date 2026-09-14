@@ -26,13 +26,16 @@
   justify-content: space-between;
   gap: 10px;
 }
-.cp-region-label {
+/* .cp préfixé : neutralise les styles de <label> des formulaires hôtes (ex. Deals) */
+.cp .cp-region-label {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
+  text-transform: none;
+  letter-spacing: normal;
   cursor: pointer;
 }
 .cp-count {

@@ -8,7 +8,7 @@
 
 import { useSyncExternalStore } from 'react'
 
-const SHARED_KEY_RE = /^scout_(campaign|deals|outreach_juridique|(domains|zefix|linkedin)_[a-z_]+)$/
+const SHARED_KEY_RE = /^scout_(campaign|deals|outreach_juridique|outreach_settings|(domains|zefix|linkedin)_[a-z_]+)$/
 const MIGRATED_KEY  = 'scout_store_migrated'
 const CHUNK         = 400
 

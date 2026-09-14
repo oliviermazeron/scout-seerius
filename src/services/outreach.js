@@ -1,9 +1,9 @@
 // ─── Campagne email Juridique & Fiscal ───────────────────────────────────────
-// Cibles (cabinets ajoutés depuis les tableaux de segment), signature expéditeur
-// et modèles d'emails personnalisés — persistés en localStorage.
+// Cibles (cabinets ajoutés depuis les tableaux de segment), réglages de campagne
+// (objectif, critères d'acquisition), signature expéditeur et modèles d'emails.
 // Le statut relationnel partage la clé `scout_campaign` (même format
 // "segmentId:companyKey") que les tableaux et l'onglet Campagnes.
-// Cibles et statuts sont partagés (store.js) ; la signature reste propre au navigateur.
+// Cibles, statuts et réglages sont partagés (store.js) ; la signature reste propre au navigateur.
 
 import { saveShared } from './store.js'
 
@@ -16,7 +16,35 @@ export const JURIDIQUE_SEGMENTS = {
   conseil_fiscal: { label: 'Conseils fiscaux', short: 'Conseil fiscal', icon: '🧾' },
 }
 
+export const OBJECTIVES = {
+  dealflow:    { label: 'Deal flow', desc: 'Obtenir des dossiers de sociétés small & mid cap suisses à reprendre' },
+  partenariat: { label: 'Partenariat', desc: 'Présenter Seerius et nouer une relation de recommandation' },
+}
+
+// Critères d'acquisition cités dans les emails deal flow (modifiables dans la page)
+export const DEAL_CRITERIA_FIELDS = [
+  { id: 'ca',           label: "Chiffre d'affaires" },
+  { id: 'ebitda',       label: 'EBITDA' },
+  { id: 'situations',   label: 'Situations' },
+  { id: 'secteurs',     label: 'Secteurs' },
+  { id: 'region',       label: 'Région' },
+  { id: 'responseTime', label: 'Délai de premier retour' },
+]
+
+const DEFAULT_SETTINGS = {
+  objective: 'dealflow',
+  criteria: {
+    ca:           'de 5 à 100 MCHF',
+    ebitda:       'de 1 à 15 MCHF, rentable',
+    situations:   "succession familiale, départ à la retraite du dirigeant, sortie d'un actionnaire",
+    secteurs:     'industrie, services B2B, distribution, technologies (hors immobilier et services financiers)',
+    region:       'Suisse, en priorité la Suisse romande',
+    responseTime: '10 jours ouvrés',
+  },
+}
+
 const TARGETS_KEY  = 'scout_outreach_juridique'
+const SETTINGS_KEY = 'scout_outreach_settings'
 const SENDER_KEY   = 'scout_outreach_sender'
 const PIPELINE_KEY = 'scout_campaign'
 
@@ -50,7 +78,16 @@ export function addTargets(list) {
   return added
 }
 
-// ─── Signature & pipeline ─────────────────────────────────────────────────────
+// ─── Réglages, signature & pipeline ───────────────────────────────────────────
+export function readSettings() {
+  const s = readJSON(SETTINGS_KEY, {})
+  return {
+    objective: OBJECTIVES[s.objective] ? s.objective : DEFAULT_SETTINGS.objective,
+    criteria: { ...DEFAULT_SETTINGS.criteria, ...(s.criteria ?? {}) },
+  }
+}
+export const writeSettings = (settings) => saveShared(SETTINGS_KEY, settings)
+
 export const readSender  = () => readJSON(SENDER_KEY, { name: '', title: '', phone: '' })
 export const writeSender = (sender) => writeJSON(SENDER_KEY, sender)
 
@@ -63,10 +100,27 @@ export function setPipelineStatus(id, statut) {
   return pipeline
 }
 
-// ─── Modèles ──────────────────────────────────────────────────────────────────
-const PITCH = `Seerius est une société d'investissement spécialisée dans les PME suisses et européennes en situation de succession familiale. Notre approche est opérationnelle : après chaque acquisition, nos équipes travaillent avec le management pour auditer les processus, identifier les leviers de productivité et les déployer — avec des outils d'intelligence artificielle là où ils améliorent concrètement l'EBITDA.`
+// ─── Éléments communs ─────────────────────────────────────────────────────────
+function salutation(segment, contact) {
+  if (segment === 'avocat' || segment === 'notaire') {
+    return contact?.lastName ? `Maître ${contact.lastName},` : 'Maître,'
+  }
+  const name = [contact?.firstName, contact?.lastName].filter(Boolean).join(' ')
+  return name ? `Bonjour ${name},` : 'Madame, Monsieur,'
+}
 
-const HOOKS = {
+function signature(sender) {
+  return [sender?.name || '[Prénom Nom]', sender?.title, 'Seerius', sender?.phone].filter(Boolean).join('\n')
+}
+
+function inPerson(city) {
+  return city ? `à ${city}` : 'en personne'
+}
+
+// ─── Modèles « Partenariat » ──────────────────────────────────────────────────
+const PARTNER_PITCH = `Seerius est une société d'investissement spécialisée dans les PME suisses et européennes en situation de succession familiale. Notre approche est opérationnelle : après chaque acquisition, nos équipes travaillent avec le management pour auditer les processus, identifier les leviers de productivité et les déployer — avec des outils d'intelligence artificielle là où ils améliorent concrètement l'EBITDA.`
+
+const PARTNER_HOOKS = {
   avocat: {
     subject: (co) => `Cessions de PME — Seerius x ${co}`,
     intro: `Vous structurez les cessions d'entreprises ; nous les finançons et accompagnons les sociétés après la reprise. C'est une complémentarité naturelle.`,
@@ -89,40 +143,22 @@ const HOOKS = {
   },
 }
 
-function salutation(segment, contact) {
-  if (segment === 'avocat' || segment === 'notaire') {
-    return contact?.lastName ? `Maître ${contact.lastName},` : 'Maître,'
-  }
-  const name = [contact?.firstName, contact?.lastName].filter(Boolean).join(' ')
-  return name ? `Bonjour ${name},` : 'Madame, Monsieur,'
-}
-
-function signature(sender) {
-  return [sender?.name || '[Prénom Nom]', sender?.title, 'Seerius', sender?.phone].filter(Boolean).join('\n')
-}
-
-function meetingAsk(city) {
-  const inPerson = city ? `autour d'un café à ${city}` : 'en personne'
-  return `Seriez-vous disponible pour un premier échange de 20 minutes dans les prochaines semaines — en visio, ou ${inPerson} si vous préférez ? Je m'adapte volontiers à vos disponibilités.`
-}
-
-// target: { segment, name, municipality } · contact: { firstName, lastName } · sender: { name, title, phone }
-export function buildEmail(target, contact, sender) {
-  const hook = HOOKS[target.segment] ?? HOOKS.fiduciaire
+function partnerEmail(target, contact, sender) {
+  const hook = PARTNER_HOOKS[target.segment] ?? PARTNER_HOOKS.fiduciaire
   return {
     subject: hook.subject(target.name),
     body: [
       salutation(target.segment, contact),
       hook.intro,
-      PITCH,
+      PARTNER_PITCH,
       hook.close,
-      meetingAsk(target.municipality),
+      `Seriez-vous disponible pour un premier échange de 20 minutes dans les prochaines semaines — en visio, ou ${target.municipality ? `autour d'un café à ${target.municipality}` : 'en personne'} si vous préférez ? Je m'adapte volontiers à vos disponibilités.`,
       `Avec mes meilleures salutations,\n\n${signature(sender)}`,
     ].join('\n\n'),
   }
 }
 
-export function buildFollowUp(target, contact, sender, subject) {
+function partnerFollowUp(target, contact, sender, subject) {
   return {
     subject: `RE: ${subject}`,
     body: [
@@ -132,4 +168,100 @@ export function buildFollowUp(target, contact, sender, subject) {
       `Avec mes meilleures salutations,\n\n${signature(sender)}`,
     ].join('\n\n'),
   }
+}
+
+// ─── Modèles « Deal flow » ────────────────────────────────────────────────────
+const DEALFLOW_PITCH = `Seerius est une société d'investissement qui reprend des participations majoritaires dans des PME suisses de taille small et mid cap.`
+
+// Le différenciant Seerius : l'accompagnement opérationnel après la reprise
+const OPERATIONAL_EDGE = [
+  `Ce qui distingue Seerius d'un investisseur financier classique, c'est ce qui se passe après la reprise. Nos équipes s'impliquent directement dans l'entreprise, aux côtés du management en place :`,
+  `• un audit des processus pour identifier les vrais leviers de productivité ;`,
+  `• la mise en œuvre concrète de ces améliorations (organisation, workflows, outils), avec l'intelligence artificielle là où elle crée une valeur réelle ;`,
+  `• un objectif mesurable : l'amélioration de l'EBITDA, suivie et documentée.`,
+  ``,
+  `Pour un dirigeant qui cède, c'est la garantie que son entreprise sera développée, et pas seulement détenue.`,
+].join('\n')
+
+const DEALFLOW_HOOKS = {
+  avocat: {
+    subject: () => `Dossiers de cession PME — critères d'acquisition Seerius`,
+    intro: `Vous accompagnez des actionnaires de PME dans la cession de leur société, et voyez passer des dossiers bien avant qu'ils ne soient mis sur le marché.`,
+    edge: `Pour vos clients cédants, c'est un acquéreur qui apporte davantage qu'un prix : un projet crédible pour l'entreprise, souvent déterminant dans le choix du repreneur.`,
+    ask: `Si vous conseillez des actionnaires qui envisagent de céder, ou si vous accompagnez un processus de vente à la recherche d'un acquéreur, nous serions heureux d'étudier ces dossiers. Un teaser anonymisé suffit pour un premier retour, et un accord de confidentialité peut être signé en amont.`,
+  },
+  notaire: {
+    subject: () => `Transmissions d'entreprises sans repreneur — Seerius`,
+    intro: `Lors de la préparation d'une succession, vous rencontrez des dirigeants dont l'entreprise n'a pas de repreneur identifié dans la famille ou parmi les cadres.`,
+    edge: `Pour un dirigeant attaché à son entreprise, c'est l'assurance d'une continuité : l'entreprise, ses emplois et son ancrage local sont préservés et développés.`,
+    ask: `Lorsque c'est le cas, nous étudions volontiers ces situations très en amont, en toute discrétion. Un teaser anonymisé suffit pour un premier retour.`,
+  },
+  fiduciaire: {
+    subject: () => `Vos clients dirigeants sans successeur — Seerius, repreneur`,
+    intro: `Parmi vos clients, certains dirigeants approchent de la retraite sans successeur identifié. Vous connaissez leurs comptes mieux que quiconque, et êtes souvent le premier à savoir qu'ils envisagent de vendre.`,
+    edge: `Vous connaissez les marges de progrès de vos clients ; notre métier est précisément de les concrétiser après la reprise. Et le mandat de la fiduciaire reste en place.`,
+    ask: `Nous étudions volontiers ces situations, même à un stade préliminaire. Un teaser anonymisé suffit pour un premier retour.`,
+  },
+  conseil_fiscal: {
+    subject: () => `Cessions de PME en préparation — Seerius, acquéreur`,
+    intro: `Lorsque vous travaillez sur la planification successorale d'un dirigeant ou la structuration fiscale d'une vente, la question de l'acquéreur se pose rapidement.`,
+    edge: `Une reprise préparée avec un acquéreur impliqué opérationnellement facilite la structuration de l'opération et la transition du dirigeant.`,
+    ask: `Si l'un de vos clients prépare la cession de sa société et n'a pas encore d'acquéreur, nous serions heureux d'étudier le dossier. Votre rôle dans la structuration de l'opération reste entier, et nous travaillons en coordination avec vous.`,
+  },
+}
+
+function criteriaBlock(c) {
+  return [
+    'Les dossiers que nous recherchons :',
+    `• Chiffre d'affaires : ${c.ca}`,
+    `• EBITDA : ${c.ebitda}`,
+    `• Situations : ${c.situations}`,
+    `• Secteurs : ${c.secteurs}`,
+    `• Région : ${c.region}`,
+  ].join('\n')
+}
+
+function dealflowEmail(target, contact, sender, criteria) {
+  const hook = DEALFLOW_HOOKS[target.segment] ?? DEALFLOW_HOOKS.fiduciaire
+  return {
+    subject: hook.subject(target.name),
+    body: [
+      salutation(target.segment, contact),
+      hook.intro,
+      DEALFLOW_PITCH,
+      OPERATIONAL_EDGE,
+      hook.edge,
+      criteriaBlock(criteria),
+      hook.ask,
+      `Nous revenons sous ${criteria.responseTime} avec une position claire, en toute confidentialité. Seriez-vous ouvert à un échange de 20 minutes, en visio ou ${inPerson(target.municipality)}, pour vous présenter notre approche et comprendre les dossiers que vous accompagnez ?`,
+      `Avec mes meilleures salutations,\n\n${signature(sender)}`,
+    ].join('\n\n'),
+  }
+}
+
+function dealflowFollowUp(target, contact, sender, subject, criteria) {
+  return {
+    subject: `RE: ${subject}`,
+    body: [
+      salutation(target.segment, contact),
+      `Je me permets de revenir vers vous au sujet de mon message de la semaine dernière : Seerius recherche des PME suisses à reprendre (chiffre d'affaires ${criteria.ca}, EBITDA ${criteria.ebitda}) — en repreneur qui s'implique opérationnellement après la reprise, pas en simple investisseur financier.`,
+      `Si un dossier correspondant se présente chez ${target.name}, un simple email avec un teaser anonymisé suffit : nous revenons sous ${criteria.responseTime}. Et si un échange de 20 minutes en visio vous convient pour faire connaissance, je m'adapte à vos disponibilités.`,
+      `Avec mes meilleures salutations,\n\n${signature(sender)}`,
+    ].join('\n\n'),
+  }
+}
+
+// ─── API ──────────────────────────────────────────────────────────────────────
+// target: { segment, name, municipality } · contact: { firstName, lastName }
+// sender: { name, title, phone } · settings: { objective, criteria }
+export function buildEmail(target, contact, sender, settings = DEFAULT_SETTINGS) {
+  return settings.objective === 'partenariat'
+    ? partnerEmail(target, contact, sender)
+    : dealflowEmail(target, contact, sender, settings.criteria)
+}
+
+export function buildFollowUp(target, contact, sender, subject, settings = DEFAULT_SETTINGS) {
+  return settings.objective === 'partenariat'
+    ? partnerFollowUp(target, contact, sender, subject)
+    : dealflowFollowUp(target, contact, sender, subject, settings.criteria)
 }
