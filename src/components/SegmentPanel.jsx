@@ -4,13 +4,8 @@ import { searchByBrave } from '../services/braveSegmentService.js'
 import { getBanquesCantonales } from '../services/banquesCantonales.js'
 import { searchFinmaGFI } from '../services/finmaService.js'
 import ContactTable from './ContactTable.jsx'
+import CantonPicker from './CantonPicker.jsx'
 import './SegmentPanel.css'
-
-const ALL_CANTONS = [
-  'AG','AI','AR','BE','BL','BS','FR','GE','GL','GR',
-  'JU','LU','NE','NW','OW','SG','SH','SO','SZ','TG',
-  'TI','UR','VD','VS','ZG','ZH',
-]
 
 // Badge source
 const SOURCE_BADGE = {
@@ -121,12 +116,6 @@ export default function SegmentPanel({ segment, onNavigate }) {
   const [error, setError] = useState(null)
   const [searched, setSearched] = useState(false)
 
-  function toggleCanton(c) {
-    setCantons((prev) =>
-      prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
-    )
-  }
-
   async function handleSearch() {
     setLoading(true)
     setError(null)
@@ -191,22 +180,7 @@ export default function SegmentPanel({ segment, onNavigate }) {
       {/* Filtre cantons */}
       <div className="filters">
         <span className="filter-label">Filtrer par canton :</span>
-        <div className="canton-grid">
-          {ALL_CANTONS.map((c) => (
-            <button
-              key={c}
-              className={`canton-btn ${cantons.includes(c) ? 'canton-btn--on' : ''}`}
-              onClick={() => toggleCanton(c)}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-        {cantons.length > 0 && (
-          <button className="btn-clear" onClick={() => setCantons([])}>
-            Effacer la sélection ({cantons.length})
-          </button>
-        )}
+        <CantonPicker value={cantons} onChange={setCantons} />
       </div>
 
       <div className="search-bar">

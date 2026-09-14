@@ -1,0 +1,55 @@
+.cp { display: flex; flex-direction: column; gap: 6px; }
+
+.cp-all {
+  align-self: flex-start;
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+}
+.cp-all--on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.cp-region {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: var(--surface);
+}
+.cp-region--active { border-color: var(--accent); background: var(--accent-light); }
+
+.cp-region-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cp-region-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+.cp-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 7px;
+}
+.cp-detail {
+  background: transparent;
+  color: var(--accent);
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cp-cantons { padding: 8px 0 2px 24px; }
