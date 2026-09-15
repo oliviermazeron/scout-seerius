@@ -744,20 +744,41 @@ export default function OutreachPanel({ onNavigate }) {
         {settings.objective === 'dealflow' && (
           <>
             <div className="op-criteria">
-              {DEAL_CRITERIA_FIELDS.map((f) => (
-                <label key={f.id} className="op-criterion">
-                  <span>{f.label}</span>
-                  <input
-                    className={String(settings.criteria[f.id] ?? '').trim() ? '' : 'op-input--missing'}
-                    value={settings.criteria[f.id]}
-                    onChange={(e) => setCriterion(f.id, e.target.value)}
-                  />
-                </label>
+              {DEAL_CRITERIA_FIELDS.filter((f) => settings.criteria[f.id] !== null).map((f) => (
+                <div key={f.id} className="op-criterion">
+                  <label htmlFor={`criterion-${f.id}`}>{f.label}</label>
+                  <div className="op-criterion-row">
+                    <input
+                      id={`criterion-${f.id}`}
+                      className={String(settings.criteria[f.id] ?? '').trim() ? '' : 'op-input--missing'}
+                      value={settings.criteria[f.id] ?? ''}
+                      onChange={(e) => setCriterion(f.id, e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="op-criterion-remove"
+                      onClick={() => setCriterion(f.id, null)}
+                      title={`Retirer : « ${f.label} » ne sera plus mentionné dans les emails`}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
-            {DEAL_CRITERIA_FIELDS.some((f) => !String(settings.criteria[f.id] ?? '').trim()) && (
+            {DEAL_CRITERIA_FIELDS.some((f) => settings.criteria[f.id] === null) && (
+              <div className="op-criteria-removed">
+                <span className="op-muted">Non mentionnés dans les emails :</span>
+                {DEAL_CRITERIA_FIELDS.filter((f) => settings.criteria[f.id] === null).map((f) => (
+                  <button key={f.id} type="button" className="op-chip" onClick={() => setCriterion(f.id, '')}>
+                    + {f.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {DEAL_CRITERIA_FIELDS.some((f) => settings.criteria[f.id] !== null && !String(settings.criteria[f.id] ?? '').trim()) && (
               <div className="op-incomplete">
-                Critère vide : aucun email deal flow ni tâche ne sera généré tant que tous les critères ne sont pas renseignés.
+                Critère vide : renseignez-le ou retirez-le avec ✕. Aucun email deal flow ni tâche n'est généré tant qu'un critère affiché est vide.
               </div>
             )}
             <div className="op-warn">

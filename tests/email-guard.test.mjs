@@ -40,6 +40,30 @@ test('CA manquant (défaut constaté dans HubSpot) : génération refusée, emai
   assertIncomplete(() => buildEmail(target, contact, sender, withCriteria({ ca: '   ' })), ["Chiffre d'affaires"])
 })
 
+test('critère retiré volontairement : non mentionné, email et relance complets', () => {
+  const settings = withCriteria({ ca: null })
+  const email = buildEmail(target, contact, sender, settings)
+  assert.ok(!email.body.includes("Chiffre d'affaires"))
+  assert.ok(email.body.includes('• EBITDA :'))
+  assert.deepEqual(emailProblems(email), [])
+  const followUp = buildFollowUp(target, contact, sender, email.subject, settings)
+  assert.ok(!followUp.body.includes("chiffre d'affaires"))
+  assert.ok(followUp.body.includes('(EBITDA '))
+  assert.deepEqual(emailProblems(followUp), [])
+})
+
+test('tous les critères retirés : ni liste ni délai chiffré, texte cohérent', () => {
+  const settings = withCriteria({ ca: null, ebitda: null, situations: null, secteurs: null, region: null, responseTime: null })
+  const email = buildEmail(target, contact, sender, settings)
+  assert.ok(!email.body.includes('Les dossiers que nous recherchons'))
+  assert.match(email.body, /Nous revenons rapidement/)
+  assert.deepEqual(emailProblems(email), [])
+  const followUp = buildFollowUp(target, contact, sender, email.subject, settings)
+  assert.match(followUp.body, /à reprendre — en repreneur/)
+  assert.match(followUp.body, /nous revenons rapidement/)
+  assert.deepEqual(emailProblems(followUp), [])
+})
+
 test('nom du signataire manquant : génération refusée (pas de [Prénom Nom])', () => {
   assertIncomplete(() => buildEmail(target, contact, { ...sender, name: '' }, complete), ['signataire'])
   assertIncomplete(() => buildEmail(target, contact, { title: 'Associé' }, complete), ['signataire'])

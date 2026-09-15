@@ -212,16 +212,19 @@ const DEALFLOW_HOOKS = {
   },
 }
 
+// Critère retiré volontairement dans la page : null → non mentionné.
+// Chaîne vide : oubli → la génération échoue (voir missingData).
+const isRemoved = (value) => value === null
+const LISTED_CRITERIA = DEAL_CRITERIA_FIELDS.filter((f) => f.id !== 'responseTime')
+
 function criteriaBlock(c) {
-  return [
-    'Les dossiers que nous recherchons :',
-    `• Chiffre d'affaires : ${c.ca}`,
-    `• EBITDA : ${c.ebitda}`,
-    `• Situations : ${c.situations}`,
-    `• Secteurs : ${c.secteurs}`,
-    `• Région : ${c.region}`,
-  ].join('\n')
+  const lines = LISTED_CRITERIA
+    .filter((f) => !isRemoved(c[f.id]))
+    .map((f) => `• ${f.label} : ${String(c[f.id]).trim()}`)
+  return lines.length ? ['Les dossiers que nous recherchons :', ...lines].join('\n') : null
 }
+
+const responseDelay = (c) => (isRemoved(c.responseTime) ? 'rapidement' : `sous ${String(c.responseTime).trim()}`)
 
 function dealflowEmail(target, contact, sender, criteria) {
   const hook = DEALFLOW_HOOKS[target.segment] ?? DEALFLOW_HOOKS.fiduciaire
@@ -235,10 +238,19 @@ function dealflowEmail(target, contact, sender, criteria) {
       hook.edge,
       criteriaBlock(criteria),
       hook.ask,
-      `Nous revenons sous ${criteria.responseTime} avec une position claire, en toute confidentialité. Seriez-vous ouvert à un échange de 20 minutes, en visio ou ${inPerson(target.municipality)}, pour vous présenter notre approche et comprendre les dossiers que vous accompagnez ?`,
+      `Nous revenons ${responseDelay(criteria)} avec une position claire, en toute confidentialité. Seriez-vous ouvert à un échange de 20 minutes, en visio ou ${inPerson(target.municipality)}, pour vous présenter notre approche et comprendre les dossiers que vous accompagnez ?`,
       `Avec mes meilleures salutations,\n\n${signature(sender)}`,
-    ].join('\n\n'),
+    ].filter(Boolean).join('\n\n'),
   }
+}
+
+// « (chiffre d'affaires …, EBITDA …) » limité aux critères mentionnés
+function sizeSummary(c) {
+  const parts = [
+    !isRemoved(c.ca) && `chiffre d'affaires ${String(c.ca).trim()}`,
+    !isRemoved(c.ebitda) && `EBITDA ${String(c.ebitda).trim()}`,
+  ].filter(Boolean)
+  return parts.length ? ` (${parts.join(', ')})` : ''
 }
 
 function dealflowFollowUp(target, contact, sender, subject, criteria) {
@@ -246,8 +258,8 @@ function dealflowFollowUp(target, contact, sender, subject, criteria) {
     subject: `RE: ${subject}`,
     body: [
       salutation(target.segment, contact),
-      `Je me permets de revenir vers vous au sujet de mon message de la semaine dernière : Seerius recherche des PME suisses à reprendre (chiffre d'affaires ${criteria.ca}, EBITDA ${criteria.ebitda}) — en repreneur qui s'implique opérationnellement après la reprise, pas en simple investisseur financier.`,
-      `Si un dossier correspondant se présente chez ${target.name}, un simple email avec un teaser anonymisé suffit : nous revenons sous ${criteria.responseTime}. Et si un échange de 20 minutes en visio vous convient pour faire connaissance, je m'adapte à vos disponibilités.`,
+      `Je me permets de revenir vers vous au sujet de mon message de la semaine dernière : Seerius recherche des PME suisses à reprendre${sizeSummary(criteria)} — en repreneur qui s'implique opérationnellement après la reprise, pas en simple investisseur financier.`,
+      `Si un dossier correspondant se présente chez ${target.name}, un simple email avec un teaser anonymisé suffit : nous revenons ${responseDelay(criteria)}. Et si un échange de 20 minutes en visio vous convient pour faire connaissance, je m'adapte à vos disponibilités.`,
       `Avec mes meilleures salutations,\n\n${signature(sender)}`,
     ].join('\n\n'),
   }
@@ -265,7 +277,9 @@ function missingData(target, sender, settings) {
   if (!String(sender?.name ?? '').trim()) missing.push('nom du signataire manquant (« Votre signature »)')
   if (settings?.objective !== 'partenariat') {
     for (const field of DEAL_CRITERIA_FIELDS) {
-      if (!String(settings?.criteria?.[field.id] ?? '').trim()) missing.push(`critère « ${field.label} » vide`)
+      const value = settings?.criteria?.[field.id]
+      if (value === null) continue // retiré volontairement : non mentionné
+      if (!String(value ?? '').trim()) missing.push(`critère « ${field.label} » vide (renseignez-le ou retirez-le)`)
     }
   }
   return missing
