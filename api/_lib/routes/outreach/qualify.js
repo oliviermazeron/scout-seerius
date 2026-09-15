@@ -89,7 +89,7 @@ export default async function handler(req, res) {
     }
 
     const deal = await createDeal({ name: dealname, companyId: company.id, contactId, description })
-    if (!deal.ok) return res.status(502).json({ error: `Affaire HubSpot non créée : ${deal.error}` })
+    if (!deal.ok) return res.status(502).json({ error: `Transaction HubSpot non créée : ${deal.error}` })
 
     const entry = { key, name, dealId: deal.id, companyId: company.id, contactId, contactEmail: to, createdAt: Date.now() }
     await hsetJSON(DEALS_KEY, key, entry)

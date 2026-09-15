@@ -77,7 +77,7 @@ export default async function handler(req, res) {
         // Affaire « Deal sourcing » → « Échange en cours » (jamais de recul)
         if (record.dealId) {
           const moved = await moveDealToStage(record.dealId, 'conversation').catch((err) => ({ ok: false, error: err.message }))
-          if (!moved.ok) report.errors.push(`${record.email} : affaire ${record.dealId} non avancée (${moved.error})`)
+          if (!moved.ok) report.errors.push(`${record.email} : transaction ${record.dealId} non avancée (${moved.error})`)
         }
         continue
       }

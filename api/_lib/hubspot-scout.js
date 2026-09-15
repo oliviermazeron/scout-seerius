@@ -156,7 +156,7 @@ export async function dealPipeline() {
   const r = await request('/crm/v3/pipelines/deals')
   if (!r.ok) {
     throw Object.assign(
-      new Error(`Pipelines d'affaires HubSpot illisibles (HTTP ${r.status}${r.data?.message ? ` : ${r.data.message}` : ''})`),
+      new Error(`Pipelines de transactions HubSpot illisibles (HTTP ${r.status}${r.data?.message ? ` : ${r.data.message}` : ''})`),
       { code: 'PIPELINE_LOOKUP_FAILED' },
     )
   }
@@ -220,7 +220,7 @@ export async function associateDealToContact(dealId, contactId) {
 export async function moveDealToStage(dealId, stageKey) {
   const pipeline = await dealPipeline()
   const r = await request(`/crm/v3/objects/deals/${dealId}?properties=dealstage,pipeline`)
-  if (!r.ok) return { ok: false, error: `Affaire illisible (HTTP ${r.status})` }
+  if (!r.ok) return { ok: false, error: `Transaction illisible (HTTP ${r.status})` }
   const currentKey = AUTO_STAGE_ORDER.find((k) => pipeline.stages[k] === r.data.properties?.dealstage)
   if (r.data.properties?.pipeline !== pipeline.id || !currentKey) return { ok: true, skipped: 'étape modifiée manuellement' }
   if (AUTO_STAGE_ORDER.indexOf(currentKey) >= AUTO_STAGE_ORDER.indexOf(stageKey)) return { ok: true, skipped: 'déjà à cette étape ou plus loin' }

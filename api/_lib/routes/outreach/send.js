@@ -66,7 +66,7 @@ export default async function handler(req, res) {
       to,
       audience,
       subscriptionType: AUDIENCES[audience],
-      dealStage: dealId ? `affaire ${dealId} → Contactée (simulé)` : null,
+      dealStage: dealId ? `transaction ${dealId} → Contactée (simulé)` : null,
       fromName: senderName ?? '',
       subject: email.subject,
       text,
