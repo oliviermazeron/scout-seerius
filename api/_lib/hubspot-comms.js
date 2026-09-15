@@ -97,15 +97,25 @@ export async function checkSubscription(email) {
   // channel=EMAIL requis : sans lui, HubSpot répond 400 (constaté en production le 15.09.2026).
   const wide = await request(`/communication-preferences/v4/statuses/${encodeURIComponent(key)}/unsubscribe-all?channel=EMAIL`, { timeoutMs: STATUS_TIMEOUT_MS })
   if (!wide.ok) throw new Error(`Statut « désinscrit de tout » HubSpot indisponible (HTTP ${wide.status}${hubspotMessage(wide)})`)
-  // Réponse documentée : objet unique { channel, subscriberIdString, status, wideStatusType, … }.
-  // Un tableau results[] est aussi accepté. Aucun statut lisible → on lève (fail-closed).
-  const wideEntries = Array.isArray(wide.data?.results) ? wide.data.results : [wide.data]
-  const wideStatuses = wideEntries.map((w) => w?.statusState ?? w?.status).filter((s) => ['SUBSCRIBED', 'UNSUBSCRIBED', 'NOT_SPECIFIED'].includes(s))
-  if (!wideStatuses.length) {
-    // Extrait de la réponse (statuts d'abonnement uniquement, aucun secret) pour le diagnostic
-    throw new Error(`Réponse « désinscrit de tout » HubSpot illisible : ${JSON.stringify(wide.data ?? null).slice(0, 400)}`)
+  // Formes acceptées :
+  //  - constatée en production (15.09.2026) : { status: 'COMPLETE', results: [ … ] },
+  //    un tableau vide signifiant « aucune désinscription totale » ;
+  //  - documentée : objet unique { status: 'SUBSCRIBED' | 'UNSUBSCRIBED' | …, wideStatusType, … }.
+  // Toute autre forme ou tout statut inconnu → on lève (fail-closed).
+  const KNOWN_STATUSES = ['SUBSCRIBED', 'UNSUBSCRIBED', 'NOT_SPECIFIED']
+  const unreadable = () => new Error(
+    `Réponse « désinscrit de tout » HubSpot illisible : ${JSON.stringify(wide.data ?? null).slice(0, 400)}`)
+  let unsubscribedFromAll
+  if (Array.isArray(wide.data?.results)) {
+    if (wide.data.status && wide.data.status !== 'COMPLETE') throw unreadable()
+    const entryStatuses = wide.data.results.map((w) => w?.statusState ?? w?.status)
+    if (entryStatuses.some((s) => !KNOWN_STATUSES.includes(s))) throw unreadable()
+    unsubscribedFromAll = entryStatuses.includes('UNSUBSCRIBED')
+  } else if (KNOWN_STATUSES.includes(wide.data?.status)) {
+    unsubscribedFromAll = wide.data.status === 'UNSUBSCRIBED'
+  } else {
+    throw unreadable()
   }
-  const unsubscribedFromAll = wideStatuses.includes('UNSUBSCRIBED')
 
   const value = {
     unsubscribed: prospection?.status === 'UNSUBSCRIBED' || unsubscribedFromAll,

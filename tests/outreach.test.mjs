@@ -37,7 +37,7 @@ function resetWorld() {
     unsubscribedOneToOne: new Set(), // désinscrits du type « One to One » (hors périmètre)
     unsubscribedAll: new Set(),
     definitions: 'ok',               // 'ok' | 'missing' | 'inactive'
-    wideShape: 'documented',         // 'documented' | 'unreadable'
+    wideShape: 'observed',           // 'observed' (production) | 'object' (documentée) | 'unreadable'
     statusFail: null,    // 'http' | 'timeout' | '429once'
     emailLog: 'ok',      // 'ok' | 'error' | 'network'
     unsubscribeFail: false,
@@ -153,11 +153,20 @@ globalThis.fetch = async (url, opts = {}) => {
       }
       if (statusMatch[2]) {
         if (!u.includes('channel=EMAIL')) return reply({ message: 'channel is required' }, 400)
-        if (world.wideShape === 'unreadable') return reply({ results: [] })
-        // Forme documentée : objet unique
+        const unsubscribedAll = world.unsubscribedAll.has(email)
+        if (world.wideShape === 'unreadable') return reply({ foo: 'bar' })
+        if (world.wideShape === 'object') {
+          // Forme documentée : objet unique
+          return reply({
+            businessUnitId: 0, channel: 'EMAIL', subscriberIdString: email, wideStatusType: 'PORTAL_WIDE',
+            status: unsubscribedAll ? 'UNSUBSCRIBED' : 'SUBSCRIBED', timestamp: '2026-09-15T08:00:00Z',
+          })
+        }
+        // Forme constatée en production : tableau vide = aucune désinscription totale
         return reply({
-          businessUnitId: 0, channel: 'EMAIL', subscriberIdString: email, wideStatusType: 'PORTAL_WIDE',
-          status: world.unsubscribedAll.has(email) ? 'UNSUBSCRIBED' : 'SUBSCRIBED', timestamp: '2026-09-15T08:00:00Z',
+          status: 'COMPLETE',
+          results: unsubscribedAll ? [{ subscriberIdString: email, channel: 'EMAIL', wideStatusType: 'PORTAL_WIDE', status: 'UNSUBSCRIBED' }] : [],
+          startedAt: '2026-09-15T09:31:36.031Z', completedAt: '2026-09-15T09:31:36.037Z',
         })
       }
       return reply({ results: [
@@ -321,6 +330,15 @@ test('destinataire désinscrit de toutes les communications : pas d\'envoi', asy
   const r = await call('outreach/send', { headers: ACCESS, body: sendBody('claire@etude.ch') })
   assert.equal(r.status, 409)
   assert.equal(world.gmailSent.length, 0)
+})
+
+test('désinscription totale : la forme documentée (objet unique) est aussi lue', async () => {
+  await connectGmail()
+  world.wideShape = 'object'
+  world.unsubscribedAll.add('claire@etude.ch')
+  assert.equal((await call('outreach/send', { headers: ACCESS, body: sendBody('claire@etude.ch') })).status, 409)
+  assert.equal((await call('outreach/send', { headers: ACCESS, body: sendBody('marc@fidu.ch') })).status, 200)
+  assert.equal(world.gmailSent.length, 1)
 })
 
 test('statut d\'abonnement en erreur : pas d\'envoi (fail-closed)', async () => {
