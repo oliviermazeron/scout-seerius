@@ -35,6 +35,9 @@ function commsToken() {
 }
 
 const request = (path, options) => hubspotRequest(commsToken(), path, options)
+
+// Message d'erreur renvoyé par HubSpot (déjà expurgé de tout token), pour le diagnostic
+const hubspotMessage = (r) => (r.data?.message ? ` : ${String(r.data.message).slice(0, 200)}` : '')
 const normalizeEmail = (email) => String(email ?? '').trim().toLowerCase()
 
 // Compare les noms sans tenir compte de la casse, des accents, des variantes de
@@ -86,16 +89,20 @@ export async function checkSubscription(email) {
   // Statuts par type d'abonnement.
   // Doc : https://developers.hubspot.com/docs/api-reference/communication-preferences-subscriptions-v4/subscription-status/get-communication-preferences-v4-statuses-subscriberIdString
   const statuses = await request(`/communication-preferences/v4/statuses/${encodeURIComponent(key)}?channel=EMAIL`, { timeoutMs: STATUS_TIMEOUT_MS })
-  if (!statuses.ok) throw new Error(`Statut d'abonnement HubSpot indisponible (HTTP ${statuses.status})`)
+  if (!statuses.ok) throw new Error(`Statut d'abonnement HubSpot indisponible (HTTP ${statuses.status}${hubspotMessage(statuses)})`)
   const prospection = (statuses.data.results ?? []).find((s) => String(s.subscriptionId) === String(id))
 
   // Désinscription de toutes les communications (protection supplémentaire).
   // Doc : https://developers.hubspot.com/docs/api-reference/communication-preferences-subscriptions-v4/subscription-status/get-communication-preferences-v4-statuses-subscriberIdString-unsubscribe-all
-  const wide = await request(`/communication-preferences/v4/statuses/${encodeURIComponent(key)}/unsubscribe-all`, { timeoutMs: STATUS_TIMEOUT_MS })
-  if (!wide.ok) throw new Error(`Statut « désinscrit de tout » HubSpot indisponible (HTTP ${wide.status})`)
-  const wideResults = wide.data.results ?? []
-  if (!Array.isArray(wideResults)) throw new Error('Réponse « désinscrit de tout » HubSpot illisible')
-  const unsubscribedFromAll = wideResults.some((w) => (w.statusState ?? w.status) === 'UNSUBSCRIBED')
+  // channel=EMAIL requis : sans lui, HubSpot répond 400 (constaté en production le 15.09.2026).
+  const wide = await request(`/communication-preferences/v4/statuses/${encodeURIComponent(key)}/unsubscribe-all?channel=EMAIL`, { timeoutMs: STATUS_TIMEOUT_MS })
+  if (!wide.ok) throw new Error(`Statut « désinscrit de tout » HubSpot indisponible (HTTP ${wide.status}${hubspotMessage(wide)})`)
+  // Réponse documentée : objet unique { channel, subscriberIdString, status, wideStatusType, … }.
+  // Un tableau results[] est aussi accepté. Aucun statut lisible → on lève (fail-closed).
+  const wideEntries = Array.isArray(wide.data?.results) ? wide.data.results : [wide.data]
+  const wideStatuses = wideEntries.map((w) => w?.statusState ?? w?.status).filter((s) => ['SUBSCRIBED', 'UNSUBSCRIBED', 'NOT_SPECIFIED'].includes(s))
+  if (!wideStatuses.length) throw new Error('Réponse « désinscrit de tout » HubSpot illisible')
+  const unsubscribedFromAll = wideStatuses.includes('UNSUBSCRIBED')
 
   const value = {
     unsubscribed: prospection?.status === 'UNSUBSCRIBED' || unsubscribedFromAll,

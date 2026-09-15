@@ -37,6 +37,7 @@ function resetWorld() {
     unsubscribedOneToOne: new Set(), // désinscrits du type « One to One » (hors périmètre)
     unsubscribedAll: new Set(),
     definitions: 'ok',               // 'ok' | 'missing' | 'inactive'
+    wideShape: 'documented',         // 'documented' | 'unreadable'
     statusFail: null,    // 'http' | 'timeout' | '429once'
     emailLog: 'ok',      // 'ok' | 'error' | 'network'
     unsubscribeFail: false,
@@ -151,7 +152,13 @@ globalThis.fetch = async (url, opts = {}) => {
         return reply({ policyName: 'TEN_SECONDLY_ROLLING' }, 429, { 'x-hubspot-ratelimit-remaining': '0', 'x-hubspot-ratelimit-interval-milliseconds': '5' })
       }
       if (statusMatch[2]) {
-        return reply({ results: world.unsubscribedAll.has(email) ? [{ wideStatusType: 'PORTAL_WIDE', statusState: 'UNSUBSCRIBED' }] : [] })
+        if (!u.includes('channel=EMAIL')) return reply({ message: 'channel is required' }, 400)
+        if (world.wideShape === 'unreadable') return reply({ results: [] })
+        // Forme documentée : objet unique
+        return reply({
+          businessUnitId: 0, channel: 'EMAIL', subscriberIdString: email, wideStatusType: 'PORTAL_WIDE',
+          status: world.unsubscribedAll.has(email) ? 'UNSUBSCRIBED' : 'SUBSCRIBED', timestamp: '2026-09-15T08:00:00Z',
+        })
       }
       return reply({ results: [
         { subscriptionId: 555, channel: 'EMAIL', status: world.unsubscribedOneToOne.has(email) ? 'UNSUBSCRIBED' : 'SUBSCRIBED' },
@@ -324,6 +331,15 @@ test('statut d\'abonnement en erreur : pas d\'envoi (fail-closed)', async () => 
   assert.equal(r.payload.code, 'SUBSCRIPTION_CHECK_FAILED')
   assert.equal(world.gmailSent.length, 0)
   assert.equal(world.kv.get('secret:quota:2026-09-14') ?? null, null, 'quota non consommé')
+})
+
+test('réponse « désinscrit de tout » illisible : pas d\'envoi (fail-closed)', async () => {
+  await connectGmail()
+  world.wideShape = 'unreadable'
+  const r = await call('outreach/send', { headers: ACCESS, body: sendBody('claire@etude.ch') })
+  assert.equal(r.status, 503)
+  assert.match(r.payload.error, /illisible/)
+  assert.equal(world.gmailSent.length, 0)
 })
 
 test('statut d\'abonnement hors délai : pas d\'envoi (fail-closed)', async () => {

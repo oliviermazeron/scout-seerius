@@ -5,7 +5,7 @@
 
 import { setCors, requireAccess, sendingWindow } from '../../access.js'
 import { configStatus, reportConfig } from '../../config.js'
-import { prospectionSubscriptionId, SUBSCRIPTION_NAME } from '../../hubspot-comms.js'
+import { prospectionSubscriptionId, checkSubscription, SUBSCRIPTION_NAME } from '../../hubspot-comms.js'
 import { googleConfig, gmailAccount, disconnectGmail } from '../../google.js'
 import { quotaUsed, DAILY_CAP } from '../../outreach.js'
 
@@ -39,12 +39,24 @@ export default async function handler(req, res) {
       }
     }
 
+    // ?check=hubspot&email=… : contrôle complet d'abonnement, en lecture seule
+    let subscriptionCheck
+    const checkEmail = String(req.query?.email ?? '').trim().toLowerCase()
+    if (req.query?.check === 'hubspot' && cfg.commsEnabled && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(checkEmail)) {
+      try {
+        subscriptionCheck = { email: checkEmail, ok: true, ...(await checkSubscription(checkEmail)) }
+      } catch (err) {
+        subscriptionCheck = { email: checkEmail, ok: false, error: err.message }
+      }
+    }
+
     res.setHeader('Cache-Control', 'no-store')
     return res.status(200).json({
       dryRun: cfg.dryRun,
       commsEnabled: cfg.commsEnabled,
       scoutKey: cfg.scoutKey,
       ...(subscriptionType ? { subscriptionType } : {}),
+      ...(subscriptionCheck ? { subscriptionCheck } : {}),
       configured: !!googleConfig(),
       connected: !!account,
       email: account?.email ?? null,
