@@ -1,9 +1,9 @@
 // ─── Retour OAuth Google → enregistre l'autorisation Gmail ───────────────────
 // GET /api/gmail/callback?code=…&state=…  → redirige vers /?gmail=connected|error
 
-import { publicOrigin } from '../_lib/access.js'
-import { exchangeCode } from '../_lib/google.js'
-import { redisOne } from '../_lib/redis.js'
+import { publicOrigin } from '../../access.js'
+import { exchangeCode } from '../../google.js'
+import { redisOne } from '../../redis.js'
 
 function redirect(res, location) {
   res.setHeader('Location', location)

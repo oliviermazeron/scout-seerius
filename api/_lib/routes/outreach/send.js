@@ -14,16 +14,16 @@
 //   pas de désinscription en attente → contact HubSpot → statut d'abonnement
 //   HubSpot (fail-closed) → quota → envoi Gmail → journalisation HubSpot
 
-import { setCors, requireAccess, publicOrigin, sendingWindow } from '../_lib/access.js'
-import { configStatus, reportConfig, isDryRun, logDryRun } from '../_lib/config.js'
-import { googleConfig, gmailAccount, sendGmail } from '../_lib/google.js'
-import { upsertCompany, upsertContact, associateContactToCompany } from '../_lib/hubspot-scout.js'
-import { checkSubscription } from '../_lib/hubspot-comms.js'
-import { redis, hgetJSON } from '../_lib/redis.js'
+import { setCors, requireAccess, publicOrigin, sendingWindow } from '../../access.js'
+import { configStatus, reportConfig, isDryRun, logDryRun } from '../../config.js'
+import { googleConfig, gmailAccount, sendGmail } from '../../google.js'
+import { upsertCompany, upsertContact, associateContactToCompany } from '../../hubspot-scout.js'
+import { checkSubscription } from '../../hubspot-comms.js'
+import { redis, hgetJSON } from '../../redis.js'
 import {
   SENDS_KEY, PIPELINE_KEY, DAILY_CAP, FOLLOW_UP_DAYS, DAY_MS, EMAIL_RE,
   normEmail, takeQuota, releaseQuota, quotaUsed, withUnsubscribe, pendingOptOut, logToHubSpot,
-} from '../_lib/outreach.js'
+} from '../../outreach.js'
 
 reportConfig()
 

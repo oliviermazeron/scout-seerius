@@ -1,12 +1,13 @@
 {
   "rewrites": [
+    { "source": "/api/gmail/:action", "destination": "/api/gmail?action=:action" },
+    { "source": "/api/outreach/:action", "destination": "/api/outreach?action=:action" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "crons": [
     { "path": "/api/outreach/followups", "schedule": "0 7 * * 1-5" }
   ],
   "functions": {
-    "api/outreach/followups.js": { "maxDuration": 60 },
-    "api/outreach/send.js": { "maxDuration": 30 }
+    "api/outreach.js": { "maxDuration": 60 }
   }
 }

@@ -3,10 +3,10 @@
 // DELETE /api/gmail/status  → déconnecte Gmail
 // (en-tête X-Scout-Access requis)
 
-import { setCors, requireAccess, sendingWindow } from '../_lib/access.js'
-import { configStatus, reportConfig } from '../_lib/config.js'
-import { googleConfig, gmailAccount, disconnectGmail } from '../_lib/google.js'
-import { quotaUsed, DAILY_CAP } from '../_lib/outreach.js'
+import { setCors, requireAccess, sendingWindow } from '../../access.js'
+import { configStatus, reportConfig } from '../../config.js'
+import { googleConfig, gmailAccount, disconnectGmail } from '../../google.js'
+import { quotaUsed, DAILY_CAP } from '../../outreach.js'
 
 reportConfig()
 

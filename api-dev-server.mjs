@@ -22,17 +22,26 @@ try {
   console.warn('⚠ .env.local introuvable')
 }
 
-// ── Routage : /api/x/y → ./api/x/y.js (comme Vercel, hors dossiers _lib) ─────
+// ── Routage : /api/x/y → ./api/x/y.js, sinon ./api/x.js?action=y ─────────────
+// (même comportement que les réécritures de vercel.json pour les routes regroupées)
 const handlers = new Map()
 
-async function loadHandler(pathname) {
-  if (!/^\/api(\/[a-z0-9-]+)+$/.test(pathname)) return null
-  if (handlers.has(pathname)) return handlers.get(pathname)
-  const file = join(__dirname, `${pathname}.js`)
+async function importHandler(path) {
+  if (handlers.has(path)) return handlers.get(path)
+  const file = join(__dirname, `${path}.js`)
   if (!existsSync(file)) return null
   const { default: handler } = await import(pathToFileURL(file).href)
-  handlers.set(pathname, handler)
+  handlers.set(path, handler)
   return handler
+}
+
+async function loadHandler(pathname) {
+  if (!/^\/api(\/[a-z0-9-]+)+$/.test(pathname) || pathname.startsWith('/api/_lib')) return null
+  const direct = await importHandler(pathname)
+  if (direct) return { handler: direct, action: null }
+  const parent = pathname.replace(/\/[a-z0-9-]+$/, '')
+  const grouped = parent !== '/api' ? await importHandler(parent) : null
+  return grouped ? { handler: grouped, action: pathname.split('/').pop() } : null
 }
 
 // ── Serveur HTTP minimal ───────────────────────────────────────────────────
@@ -73,9 +82,10 @@ const server = createServer(async (req, res) => {
   }
 
   try {
-    const handler = await loadHandler(url.pathname)
-    if (!handler) return res.writeHead(404).end('Not found')
-    return await handler(reqAdapter, resAdapter)
+    const route = await loadHandler(url.pathname)
+    if (!route) return res.writeHead(404).end('Not found')
+    if (route.action) reqAdapter.query.action = route.action
+    return await route.handler(reqAdapter, resAdapter)
   } catch (err) {
     console.error(err)
     if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: err.message }))

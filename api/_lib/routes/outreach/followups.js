@@ -7,15 +7,15 @@
 // Mode test : lecture du registre uniquement, aucune lecture Gmail, aucun envoi,
 // aucune écriture HubSpot ; les relances dues sont journalisées.
 
-import { setCors, requireAccess, isCronRequest, publicOrigin, sendingWindow } from '../_lib/access.js'
-import { reportConfig, isDryRun, logDryRun } from '../_lib/config.js'
-import { googleConfig, gmailAccount, sendGmail, threadReplies } from '../_lib/google.js'
-import { commsEnabled, checkSubscription } from '../_lib/hubspot-comms.js'
-import { hgetJSON, hgetallJSON } from '../_lib/redis.js'
+import { setCors, requireAccess, isCronRequest, publicOrigin, sendingWindow } from '../../access.js'
+import { reportConfig, isDryRun, logDryRun } from '../../config.js'
+import { googleConfig, gmailAccount, sendGmail, threadReplies } from '../../google.js'
+import { commsEnabled, checkSubscription } from '../../hubspot-comms.js'
+import { hgetJSON, hgetallJSON } from '../../redis.js'
 import {
   SENDS_KEY, DAY_MS, takeQuota, releaseQuota, withUnsubscribe, saveSend, optOut, pendingOptOut,
   retryPendingOptOuts, retryEmailLogs, logToHubSpot,
-} from '../_lib/outreach.js'
+} from '../../outreach.js'
 
 reportConfig()
 

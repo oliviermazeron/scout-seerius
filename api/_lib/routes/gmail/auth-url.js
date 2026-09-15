@@ -2,9 +2,9 @@
 // POST /api/gmail/auth-url  (en-tête X-Scout-Access)  → { url }
 
 import { randomBytes } from 'node:crypto'
-import { setCors, requireAccess, publicOrigin } from '../_lib/access.js'
-import { googleConfig, authUrl } from '../_lib/google.js'
-import { redisOne } from '../_lib/redis.js'
+import { setCors, requireAccess, publicOrigin } from '../../access.js'
+import { googleConfig, authUrl } from '../../google.js'
+import { redisOne } from '../../redis.js'
 
 export default async function handler(req, res) {
   setCors(res, 'POST, OPTIONS')

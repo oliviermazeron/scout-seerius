@@ -164,8 +164,11 @@ function setNow(iso) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+// Même routage que vercel.json : 'gmail/status' → api/gmail.js avec ?action=status
 async function call(route, { method = 'POST', body, query = {}, headers = {} } = {}) {
-  const { default: handler } = await import(`../api/${route}.js`)
+  const [file, action] = route.split('/')
+  const { default: handler } = await import(`../api/${file}.js`)
+  if (action) query = { ...query, action }
   let status = 200
   let payload
   const sentHeaders = {}

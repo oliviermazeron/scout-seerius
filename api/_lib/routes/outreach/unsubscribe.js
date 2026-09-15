@@ -5,10 +5,10 @@
 // ouvrent les liens, ne désinscrivent le destinataire à son insu.
 // Si HubSpot est indisponible, la demande bloque tout envoi et est réessayée.
 
-import { checkEmailToken } from '../_lib/access.js'
-import { reportConfig } from '../_lib/config.js'
-import { hgetJSON } from '../_lib/redis.js'
-import { OPTOUT_KEY, EMAIL_RE, normEmail, optOut } from '../_lib/outreach.js'
+import { checkEmailToken } from '../../access.js'
+import { reportConfig } from '../../config.js'
+import { hgetJSON } from '../../redis.js'
+import { OPTOUT_KEY, EMAIL_RE, normEmail, optOut } from '../../outreach.js'
 
 reportConfig()
 
