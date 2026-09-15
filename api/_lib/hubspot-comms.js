@@ -6,9 +6,11 @@
 // une désinscription. Aucune écriture de contact, de société ni d'email ici
 // (voir hubspot-scout.js).
 //
-// Type d'abonnement visé : « Prospection Seerius — intermédiaires » (français).
-// « Marketing Information » et « One to One » sont hors périmètre SCOUT.
-// L'ID du type est lu dans HubSpot et mis en cache en mémoire ; s'il est
+// Un type d'abonnement par audience (noms exacts, français) :
+//   intermediaires → « Prospection Seerius — intermédiaires » (SCOUT)
+//   dirigeants     → « Prospection Seerius — dirigeants »     (SWIFT)
+// « Marketing Information » et « One to One » sont hors périmètre.
+// L'ID de chaque type est lu dans HubSpot et mis en cache en mémoire ; s'il est
 // introuvable, inactif ou ambigu, on échoue explicitement : jamais de repli sur
 // un autre type, jamais d'ID en dur.
 //
@@ -19,7 +21,14 @@
 
 import { hubspotRequest } from './hubspot-http.js'
 
-export const SUBSCRIPTION_NAME = 'Prospection Seerius — intermédiaires'
+export const AUDIENCES = {
+  intermediaires: 'Prospection Seerius — intermédiaires',
+  dirigeants: 'Prospection Seerius — dirigeants',
+}
+export const DEFAULT_AUDIENCE = 'intermediaires'
+export const SUBSCRIPTION_NAME = AUDIENCES[DEFAULT_AUDIENCE]
+
+export const isAudience = (value) => Object.hasOwn(AUDIENCES, value)
 
 const STATUS_TIMEOUT_MS = 5000
 const CACHE_TTL_MS = 60_000
@@ -40,6 +49,11 @@ const request = (path, options) => hubspotRequest(commsToken(), path, options)
 const hubspotMessage = (r) => (r.data?.message ? ` : ${String(r.data.message).slice(0, 200)}` : '')
 const normalizeEmail = (email) => String(email ?? '').trim().toLowerCase()
 
+function audienceName(audience) {
+  if (!isAudience(audience)) throw Object.assign(new Error(`Audience inconnue : ${audience}`), { code: 'UNKNOWN_AUDIENCE' })
+  return AUDIENCES[audience]
+}
+
 // Compare les noms sans tenir compte de la casse, des accents, des variantes de
 // tiret ni des espaces multiples (saisie dans l'interface HubSpot)
 function normalizeName(name) {
@@ -51,46 +65,48 @@ function normalizeName(name) {
     .trim()
 }
 
-let subscriptionId = null
-const statusCache = new Map() // email → { value, exp }
+const subscriptionIds = new Map() // audience → id
+const statusCache = new Map()     // audience|email → { value, exp }
 
 export function clearCommsCache() {
-  subscriptionId = null
+  subscriptionIds.clear()
   statusCache.clear()
 }
 
-// ID du type « Prospection Seerius — intermédiaires », lu dans HubSpot.
+// ID du type d'abonnement de l'audience, lu dans HubSpot.
 // Doc : https://developers.hubspot.com/docs/api-reference/communication-preferences-subscriptions-v4/subscription-definitions/get-communication-preferences-v4-definitions
-export async function prospectionSubscriptionId() {
-  if (subscriptionId) return subscriptionId
+export async function prospectionSubscriptionId(audience = DEFAULT_AUDIENCE) {
+  const name = audienceName(audience)
+  if (subscriptionIds.has(audience)) return subscriptionIds.get(audience)
   const r = await request('/communication-preferences/v4/definitions', { timeoutMs: STATUS_TIMEOUT_MS })
   if (!r.ok) throw new Error(`Types d'abonnement HubSpot illisibles (HTTP ${r.status})`)
 
-  const wanted = normalizeName(SUBSCRIPTION_NAME)
+  const wanted = normalizeName(name)
   const matches = (r.data.results ?? []).filter((d) => normalizeName(d.name) === wanted)
-  if (matches.length === 0) throw new Error(`Type d'abonnement « ${SUBSCRIPTION_NAME} » introuvable dans HubSpot`)
-  if (matches.length > 1) throw new Error(`Plusieurs types d'abonnement « ${SUBSCRIPTION_NAME} » dans HubSpot : ambigu`)
-  if (matches[0].isActive === false) throw new Error(`Type d'abonnement « ${SUBSCRIPTION_NAME} » inactif dans HubSpot`)
+  if (matches.length === 0) throw new Error(`Type d'abonnement « ${name} » introuvable dans HubSpot`)
+  if (matches.length > 1) throw new Error(`Plusieurs types d'abonnement « ${name} » dans HubSpot : ambigu`)
+  if (matches[0].isActive === false) throw new Error(`Type d'abonnement « ${name} » inactif dans HubSpot`)
 
-  subscriptionId = matches[0].id
-  return subscriptionId
+  subscriptionIds.set(audience, matches[0].id)
+  return matches[0].id
 }
 
 // → { unsubscribed, status, unsubscribedFromAll } ; lève en cas de doute.
 // Cache mémoire de 60 s : HubSpot reste la référence, le cache évite seulement
 // de relire le statut plusieurs fois pendant un même envoi groupé.
-export async function checkSubscription(email) {
+export async function checkSubscription(email, audience = DEFAULT_AUDIENCE) {
   const key = normalizeEmail(email)
-  const cached = statusCache.get(key)
+  const cacheKey = `${audience}|${key}`
+  const cached = statusCache.get(cacheKey)
   if (cached && cached.exp > Date.now()) return cached.value
 
-  const id = await prospectionSubscriptionId()
+  const id = await prospectionSubscriptionId(audience)
 
   // Statuts par type d'abonnement.
   // Doc : https://developers.hubspot.com/docs/api-reference/communication-preferences-subscriptions-v4/subscription-status/get-communication-preferences-v4-statuses-subscriberIdString
   const statuses = await request(`/communication-preferences/v4/statuses/${encodeURIComponent(key)}?channel=EMAIL`, { timeoutMs: STATUS_TIMEOUT_MS })
   if (!statuses.ok) throw new Error(`Statut d'abonnement HubSpot indisponible (HTTP ${statuses.status}${hubspotMessage(statuses)})`)
-  const prospection = (statuses.data.results ?? []).find((s) => String(s.subscriptionId) === String(id))
+  const typed = (statuses.data.results ?? []).find((s) => String(s.subscriptionId) === String(id))
 
   // Désinscription de toutes les communications (protection supplémentaire).
   // Doc : https://developers.hubspot.com/docs/api-reference/communication-preferences-subscriptions-v4/subscription-status/get-communication-preferences-v4-statuses-subscriberIdString-unsubscribe-all
@@ -118,23 +134,23 @@ export async function checkSubscription(email) {
   }
 
   const value = {
-    unsubscribed: prospection?.status === 'UNSUBSCRIBED' || unsubscribedFromAll,
-    status: prospection?.status ?? 'NOT_SPECIFIED',
+    unsubscribed: typed?.status === 'UNSUBSCRIBED' || unsubscribedFromAll,
+    status: typed?.status ?? 'NOT_SPECIFIED',
     unsubscribedFromAll,
   }
-  statusCache.set(key, { value, exp: Date.now() + CACHE_TTL_MS })
+  statusCache.set(cacheKey, { value, exp: Date.now() + CACHE_TTL_MS })
   return value
 }
 
-// Désinscrit le destinataire du type « Prospection Seerius — intermédiaires ».
+// Désinscrit le destinataire du type d'abonnement de l'audience.
 // Doc : https://developers.hubspot.com/docs/api-reference/communication-preferences-subscriptions-v4/subscription-status/post-communication-preferences-v4-statuses-subscriberIdString
-export async function unsubscribe(email) {
+export async function unsubscribe(email, audience = DEFAULT_AUDIENCE) {
   const key = normalizeEmail(email)
-  const id = await prospectionSubscriptionId()
+  const id = await prospectionSubscriptionId(audience)
   const r = await request(`/communication-preferences/v4/statuses/${encodeURIComponent(key)}`, {
     method: 'POST',
     body: { subscriptionId: Number(id), statusState: 'UNSUBSCRIBED', channel: 'EMAIL' },
   })
-  statusCache.delete(key)
+  statusCache.delete(`${audience}|${key}`)
   return r.ok ? { ok: true } : { ok: false, error: r.data.message ?? `HTTP ${r.status}` }
 }

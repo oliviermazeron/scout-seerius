@@ -5,12 +5,14 @@
 //   POST      /api/outreach/send
 //   GET|POST  /api/outreach/followups
 //   GET|POST  /api/outreach/unsubscribe
+//   POST      /api/outreach/qualify      (cibles SWIFT → affaire « Deal sourcing »)
 
 import send from './_lib/routes/outreach/send.js'
 import followups from './_lib/routes/outreach/followups.js'
 import unsubscribe from './_lib/routes/outreach/unsubscribe.js'
+import qualify from './_lib/routes/outreach/qualify.js'
 
-const ROUTES = { send, followups, unsubscribe }
+const ROUTES = { send, followups, unsubscribe, qualify }
 
 export default function handler(req, res) {
   const route = ROUTES[req.query?.action]

@@ -121,6 +121,114 @@ const DAY_MS = 24 * 60 * 60 * 1000
 export function clearScoutCache() {
   taskOwnerIdCache = null
   emailToContactTypeId = null
+  dealPipelineCache = null
+  associationTypeCache.clear()
+}
+
+// ─── Affaires : pipeline « Deal sourcing » (cibles SWIFT) ─────────────────────
+// Pipeline et étapes lus par leur libellé exact ; introuvables → échec explicite.
+export const DEAL_PIPELINE_NAME = 'Deal sourcing'
+export const DEAL_STAGES = { qualified: 'Qualifiée', contacted: 'Contactée', conversation: 'Échange en cours' }
+const AUTO_STAGE_ORDER = ['qualified', 'contacted', 'conversation']
+
+const normalizeLabel = (label) => String(label ?? '')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+
+let dealPipelineCache = null
+const associationTypeCache = new Map() // "from/to" → typeId
+
+// Type d'association HubSpot (non libellé de préférence), lu dynamiquement.
+// Doc : https://developers.hubspot.com/docs/api-reference/latest/crm/associations/associate-records/guide
+async function associationTypeId(from, to) {
+  const cacheKey = `${from}/${to}`
+  if (associationTypeCache.has(cacheKey)) return associationTypeCache.get(cacheKey)
+  const r = await request(`/crm/associations/2026-09/${from}/${to}/labels`)
+  const defined = r.ok ? (r.data.results ?? []).filter((t) => t.category === 'HUBSPOT_DEFINED') : []
+  const type = defined.find((t) => t.label == null) ?? defined[0]
+  if (!type) throw Object.assign(new Error(`Type d'association ${from} → ${to} introuvable (HTTP ${r.status})`), { code: 'ASSOCIATION_LOOKUP_FAILED' })
+  associationTypeCache.set(cacheKey, type.typeId)
+  return type.typeId
+}
+
+// Doc : https://developers.hubspot.com/docs/api-reference/latest/crm/pipelines/guide
+export async function dealPipeline() {
+  if (dealPipelineCache) return dealPipelineCache
+  const r = await request('/crm/v3/pipelines/deals')
+  if (!r.ok) {
+    throw Object.assign(
+      new Error(`Pipelines d'affaires HubSpot illisibles (HTTP ${r.status}${r.data?.message ? ` : ${r.data.message}` : ''})`),
+      { code: 'PIPELINE_LOOKUP_FAILED' },
+    )
+  }
+  const pipelines = (r.data.results ?? []).filter((p) => !p.archived && normalizeLabel(p.label) === normalizeLabel(DEAL_PIPELINE_NAME))
+  if (pipelines.length !== 1) {
+    throw Object.assign(new Error(pipelines.length
+      ? `Plusieurs pipelines « ${DEAL_PIPELINE_NAME} » dans HubSpot : ambigu`
+      : `Pipeline « ${DEAL_PIPELINE_NAME} » introuvable dans HubSpot`), { code: 'PIPELINE_NOT_FOUND' })
+  }
+  const stages = {}
+  for (const [stageKey, label] of Object.entries(DEAL_STAGES)) {
+    const found = (pipelines[0].stages ?? []).filter((s) => !s.archived && normalizeLabel(s.label) === normalizeLabel(label))
+    if (found.length !== 1) {
+      throw Object.assign(new Error(`Étape « ${label} » introuvable ou en double dans le pipeline « ${DEAL_PIPELINE_NAME} »`), { code: 'PIPELINE_NOT_FOUND' })
+    }
+    stages[stageKey] = found[0].id
+  }
+  dealPipelineCache = { id: pipelines[0].id, stages }
+  return dealPipelineCache
+}
+
+// Crée l'affaire à l'étape « Qualifiée », assignée, associée à la société (et au contact).
+// Doc : https://developers.hubspot.com/docs/api-reference/latest/crm/objects/deals/guide
+export async function createDeal({ name, companyId, contactId, description }) {
+  const [pipeline, ownerId] = await Promise.all([dealPipeline(), taskOwnerId()])
+  const associations = []
+  for (const [id, objectType] of [[companyId, 'company'], [contactId, 'contact']]) {
+    if (!id) continue
+    associations.push({
+      to: { id: String(id) },
+      types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: await associationTypeId('deal', objectType) }],
+    })
+  }
+  const r = await request('/crm/v3/objects/deals', {
+    method: 'POST',
+    body: {
+      properties: {
+        dealname: name,
+        pipeline: pipeline.id,
+        dealstage: pipeline.stages.qualified,
+        hubspot_owner_id: String(ownerId),
+        ...(description ? { description } : {}),
+      },
+      associations,
+    },
+  })
+  return r.ok ? { ok: true, id: r.data.id } : { ok: false, error: r.data?.message ?? `HTTP ${r.status}` }
+}
+
+export async function associateDealToContact(dealId, contactId) {
+  const typeId = await associationTypeId('deal', 'contact')
+  const r = await request(`/crm/v4/objects/deals/${dealId}/associations/contacts/${contactId}`, {
+    method: 'PUT',
+    body: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: typeId }],
+  })
+  return { ok: r.ok }
+}
+
+// Avance l'affaire automatiquement (Qualifiée → Contactée → Échange en cours),
+// sans jamais la faire reculer ni toucher une affaire déplacée à la main ailleurs.
+export async function moveDealToStage(dealId, stageKey) {
+  const pipeline = await dealPipeline()
+  const r = await request(`/crm/v3/objects/deals/${dealId}?properties=dealstage,pipeline`)
+  if (!r.ok) return { ok: false, error: `Affaire illisible (HTTP ${r.status})` }
+  const currentKey = AUTO_STAGE_ORDER.find((k) => pipeline.stages[k] === r.data.properties?.dealstage)
+  if (r.data.properties?.pipeline !== pipeline.id || !currentKey) return { ok: true, skipped: 'étape modifiée manuellement' }
+  if (AUTO_STAGE_ORDER.indexOf(currentKey) >= AUTO_STAGE_ORDER.indexOf(stageKey)) return { ok: true, skipped: 'déjà à cette étape ou plus loin' }
+  const u = await request(`/crm/v3/objects/deals/${dealId}`, {
+    method: 'PATCH',
+    body: { properties: { dealstage: pipeline.stages[stageKey] } },
+  })
+  return u.ok ? { ok: true, moved: stageKey } : { ok: false, error: u.data?.message ?? `HTTP ${u.status}` }
 }
 
 // Propriétaire des tâches : lu via l'API owners, mis en cache en mémoire.

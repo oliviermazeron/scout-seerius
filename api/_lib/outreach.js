@@ -5,12 +5,13 @@
 import { redis, redisOne, hgetJSON, hsetJSON, hgetallJSON } from './redis.js'
 import { emailToken } from './access.js'
 import { isDryRun, logDryRun } from './config.js'
-import { commsEnabled, unsubscribe } from './hubspot-comms.js'
+import { commsEnabled, unsubscribe, DEFAULT_AUDIENCE } from './hubspot-comms.js'
 import { logEmail } from './hubspot-scout.js'
 
 export const SENDS_KEY    = 'scout:scout_outreach_sends'
 export const OPTOUT_KEY   = 'scout:scout_outreach_optout'
 export const PIPELINE_KEY = 'scout:scout_campaign'
+export const DEALS_KEY    = 'scout:scout_swift_deals' // cible SWIFT → affaire HubSpot
 
 export const DAILY_CAP      = Number(process.env.OUTREACH_DAILY_CAP ?? 20)
 export const FOLLOW_UP_DAYS = 7
@@ -40,8 +41,14 @@ export async function quotaUsed(date) {
 // ─── Registre des envois ──────────────────────────────────────────────────────
 export const saveSend = (record) => hsetJSON(SENDS_KEY, record.email, record)
 
-export function withUnsubscribe(text, origin, email) {
-  const url = `${origin}/api/outreach/unsubscribe?e=${encodeURIComponent(email)}&t=${emailToken(email)}`
+// Le jeton de désinscription est lié à l'audience (le type d'abonnement écrit
+// dans HubSpot) ; l'audience par défaut garde la forme historique des liens.
+export const unsubscribeSubject = (email, audience = DEFAULT_AUDIENCE) =>
+  (audience === DEFAULT_AUDIENCE ? normEmail(email) : `${normEmail(email)}|${audience}`)
+
+export function withUnsubscribe(text, origin, email, audience = DEFAULT_AUDIENCE) {
+  const audienceParam = audience === DEFAULT_AUDIENCE ? '' : `&a=${encodeURIComponent(audience)}`
+  const url = `${origin}/api/outreach/unsubscribe?e=${encodeURIComponent(email)}${audienceParam}&t=${emailToken(unsubscribeSubject(email, audience))}`
   return `${text}\n\n—\nSi vous ne souhaitez plus recevoir de message de ma part, répondez simplement « stop » ou cliquez ici : ${url}`
 }
 
@@ -57,10 +64,11 @@ export async function pendingOptOut(email) {
 }
 
 // source : 'link' (lien de désinscription) | 'reply-stop' (réponse « stop »)
-export async function optOut(email, source) {
+// audience : type d'abonnement HubSpot à désinscrire (intermediaires | dirigeants)
+export async function optOut(email, source, audience = DEFAULT_AUDIENCE) {
   const e = normEmail(email)
   if (isDryRun()) {
-    logDryRun('désinscription', { email: e, source })
+    logDryRun('désinscription', { email: e, source, audience })
     return { dryRun: true, synced: false }
   }
 
@@ -68,7 +76,7 @@ export async function optOut(email, source) {
   let error = null
   if (commsEnabled()) {
     try {
-      const r = await unsubscribe(e)
+      const r = await unsubscribe(e, audience)
       synced = r.ok
       error = r.ok ? null : r.error
     } catch (err) {
@@ -81,7 +89,7 @@ export async function optOut(email, source) {
   const now = Date.now()
   const previous = await hgetJSON(OPTOUT_KEY, e)
   await hsetJSON(OPTOUT_KEY, e, {
-    at: previous?.at ?? now, source: previous?.source ?? source,
+    at: previous?.at ?? now, source: previous?.source ?? source, audience: previous?.audience ?? audience,
     hubspotSynced: synced, lastError: error, attempts: (previous?.attempts ?? 0) + 1, lastAttemptAt: now,
   })
 
@@ -97,7 +105,7 @@ export async function retryPendingOptOuts() {
   let synced = 0
   for (const [email, entry] of Object.entries(await hgetallJSON(OPTOUT_KEY))) {
     if (entry.hubspotSynced) continue
-    if ((await optOut(email, entry.source)).synced) synced++
+    if ((await optOut(email, entry.source, entry.audience ?? DEFAULT_AUDIENCE)).synced) synced++
   }
   return synced
 }
@@ -135,7 +143,7 @@ export async function logToHubSpot(email, gmailId) {
     const r = await logEmail({
       contactId: record.contactId,
       subject: entry.subject,
-      text: withUnsubscribe(entry.body, entry.origin, key),
+      text: withUnsubscribe(entry.body, entry.origin, key, record.audience ?? DEFAULT_AUDIENCE),
       from: record.from,
       to: key,
       timestamp: entry.timestamp,

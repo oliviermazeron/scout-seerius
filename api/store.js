@@ -10,7 +10,7 @@ import { redisConfig, redis, parseHash } from './_lib/redis.js'
 
 const PREFIX    = 'scout:'
 const KEY_RE    = /^scout_[a-z0-9_]{1,60}$/
-const READ_ONLY = new Set(['scout_outreach_sends', 'scout_outreach_optout'])
+const READ_ONLY = new Set(['scout_outreach_sends', 'scout_outreach_optout', 'scout_swift_deals'])
 const MAX_OPS   = 500
 const MAX_VALUE = 100_000
 

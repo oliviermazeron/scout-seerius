@@ -8,7 +8,8 @@
 import { checkEmailToken } from '../../access.js'
 import { reportConfig } from '../../config.js'
 import { hgetJSON } from '../../redis.js'
-import { OPTOUT_KEY, EMAIL_RE, normEmail, optOut } from '../../outreach.js'
+import { OPTOUT_KEY, EMAIL_RE, normEmail, optOut, unsubscribeSubject } from '../../outreach.js'
+import { isAudience, DEFAULT_AUDIENCE } from '../../hubspot-comms.js'
 
 reportConfig()
 
@@ -43,15 +44,17 @@ export default async function handler(req, res) {
   const params = req.method === 'POST' ? { ...(req.query ?? {}), ...(req.body ?? {}) } : (req.query ?? {})
   const email = normEmail(params.e)
   const token = String(params.t ?? '')
+  const audience = params.a ? String(params.a) : DEFAULT_AUDIENCE
 
-  if (!EMAIL_RE.test(email) || !checkEmailToken(email, token)) {
+  // Jeton signé sur l'email et l'audience : impossible de changer le type désinscrit
+  if (!EMAIL_RE.test(email) || !isAudience(audience) || !checkEmailToken(unsubscribeSubject(email, audience), token)) {
     return res.status(400).end(page('Lien invalide',
       'Ce lien de désinscription est invalide ou incomplet. Vous pouvez aussi répondre « stop » à notre message.'))
   }
 
   try {
     if (req.method === 'POST') {
-      const result = await optOut(email, 'link')
+      const result = await optOut(email, 'link', audience)
       if (result.dryRun) {
         return res.status(200).end(page('Mode test',
           `Mode test actif : la désinscription de <strong>${esc(email)}</strong> a été simulée, rien n'a été enregistré.`))
@@ -73,7 +76,7 @@ export default async function handler(req, res) {
 
     return res.status(200).end(page('Ne plus recevoir nos messages',
       `Confirmez que l'adresse <strong>${esc(email)}</strong> ne doit plus recevoir de message de Seerius.`,
-      `<form method="post"><input type="hidden" name="e" value="${esc(email)}"><input type="hidden" name="t" value="${esc(token)}"><button type="submit">Confirmer la désinscription</button></form>`))
+      `<form method="post"><input type="hidden" name="e" value="${esc(email)}"><input type="hidden" name="t" value="${esc(token)}"><input type="hidden" name="a" value="${esc(audience)}"><button type="submit">Confirmer la désinscription</button></form>`))
   } catch {
     return res.status(500).end(page('Erreur temporaire',
       'La désinscription n\'a pas pu être enregistrée. Réessayez dans quelques instants, ou répondez « stop » à notre message.'))

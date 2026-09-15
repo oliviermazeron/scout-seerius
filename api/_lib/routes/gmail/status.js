@@ -5,7 +5,8 @@
 
 import { setCors, requireAccess, sendingWindow } from '../../access.js'
 import { configStatus, reportConfig } from '../../config.js'
-import { prospectionSubscriptionId, checkSubscription, SUBSCRIPTION_NAME } from '../../hubspot-comms.js'
+import { prospectionSubscriptionId, checkSubscription, isAudience, AUDIENCES, DEFAULT_AUDIENCE } from '../../hubspot-comms.js'
+import { dealPipeline, DEAL_PIPELINE_NAME } from '../../hubspot-scout.js'
 import { googleConfig, gmailAccount, disconnectGmail } from '../../google.js'
 import { quotaUsed, DAILY_CAP } from '../../outreach.js'
 
@@ -27,26 +28,41 @@ export default async function handler(req, res) {
     const account = googleConfig() ? await gmailAccount() : null
     const cfg = configStatus()
 
-    // Diagnostic à la demande (?check=hubspot) : lecture seule des types
-    // d'abonnement avec le token COMMS, pour confirmer que le type visé existe
-    let subscriptionType
-    if (req.query?.check === 'hubspot' && cfg.commsEnabled) {
-      try {
-        await prospectionSubscriptionId()
-        subscriptionType = { name: SUBSCRIPTION_NAME, found: true }
-      } catch (err) {
-        subscriptionType = { name: SUBSCRIPTION_NAME, found: false, error: err.message }
+    // Diagnostic à la demande (?check=hubspot), en lecture seule : types
+    // d'abonnement par audience (token COMMS) et pipeline « Deal sourcing » (clé SCOUT)
+    let subscriptionTypes
+    let dealPipelineCheck
+    if (req.query?.check === 'hubspot') {
+      if (cfg.commsEnabled) {
+        subscriptionTypes = {}
+        for (const [audience, name] of Object.entries(AUDIENCES)) {
+          try {
+            await prospectionSubscriptionId(audience)
+            subscriptionTypes[audience] = { name, found: true }
+          } catch (err) {
+            subscriptionTypes[audience] = { name, found: false, error: err.message }
+          }
+        }
+      }
+      if (cfg.scoutKey) {
+        try {
+          const pipeline = await dealPipeline()
+          dealPipelineCheck = { name: DEAL_PIPELINE_NAME, found: true, stages: Object.keys(pipeline.stages) }
+        } catch (err) {
+          dealPipelineCheck = { name: DEAL_PIPELINE_NAME, found: false, error: err.message }
+        }
       }
     }
 
-    // ?check=hubspot&email=… : contrôle complet d'abonnement, en lecture seule
+    // ?check=hubspot&email=…[&audience=dirigeants] : contrôle complet d'abonnement, en lecture seule
     let subscriptionCheck
     const checkEmail = String(req.query?.email ?? '').trim().toLowerCase()
+    const checkAudience = isAudience(req.query?.audience) ? req.query.audience : DEFAULT_AUDIENCE
     if (req.query?.check === 'hubspot' && cfg.commsEnabled && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(checkEmail)) {
       try {
-        subscriptionCheck = { email: checkEmail, ok: true, ...(await checkSubscription(checkEmail)) }
+        subscriptionCheck = { email: checkEmail, audience: checkAudience, ok: true, ...(await checkSubscription(checkEmail, checkAudience)) }
       } catch (err) {
-        subscriptionCheck = { email: checkEmail, ok: false, error: err.message }
+        subscriptionCheck = { email: checkEmail, audience: checkAudience, ok: false, error: err.message }
       }
     }
 
@@ -55,7 +71,8 @@ export default async function handler(req, res) {
       dryRun: cfg.dryRun,
       commsEnabled: cfg.commsEnabled,
       scoutKey: cfg.scoutKey,
-      ...(subscriptionType ? { subscriptionType } : {}),
+      ...(subscriptionTypes ? { subscriptionTypes } : {}),
+      ...(dealPipelineCheck ? { dealPipeline: dealPipelineCheck } : {}),
       ...(subscriptionCheck ? { subscriptionCheck } : {}),
       configured: !!googleConfig(),
       connected: !!account,

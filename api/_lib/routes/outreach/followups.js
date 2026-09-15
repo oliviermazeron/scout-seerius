@@ -10,7 +10,8 @@
 import { setCors, requireAccess, isCronRequest, publicOrigin, sendingWindow } from '../../access.js'
 import { reportConfig, isDryRun, logDryRun } from '../../config.js'
 import { googleConfig, gmailAccount, sendGmail, threadReplies } from '../../google.js'
-import { commsEnabled, checkSubscription } from '../../hubspot-comms.js'
+import { commsEnabled, checkSubscription, DEFAULT_AUDIENCE } from '../../hubspot-comms.js'
+import { moveDealToStage } from '../../hubspot-scout.js'
 import { hgetJSON, hgetallJSON } from '../../redis.js'
 import {
   SENDS_KEY, DAY_MS, takeQuota, releaseQuota, withUnsubscribe, saveSend, optOut, pendingOptOut,
@@ -59,19 +60,25 @@ export default async function handler(req, res) {
     if (!record || !['sent', 'followed_up'].includes(record.status)) continue
     if (Date.now() - record.sentAt > TRACKING_DAYS * DAY_MS) continue
     report.checked++
+    const audience = record.audience ?? DEFAULT_AUDIENCE
 
     try {
       const replies = await threadReplies(record.threadId)
       const human = replies.filter((m) => !BOUNCE_RE.test(m.from))
 
       if (human.some((m) => STOP_RE.test(m.snippet))) {
-        await optOut(record.email, 'reply-stop')
+        await optOut(record.email, 'reply-stop', audience)
         report.optedOut++
         continue
       }
       if (human.length) {
         await saveSend({ ...record, status: 'replied', repliedAt: Math.min(...human.map((m) => m.date)) })
         report.replied++
+        // Affaire « Deal sourcing » → « Échange en cours » (jamais de recul)
+        if (record.dealId) {
+          const moved = await moveDealToStage(record.dealId, 'conversation').catch((err) => ({ ok: false, error: err.message }))
+          if (!moved.ok) report.errors.push(`${record.email} : affaire ${record.dealId} non avancée (${moved.error})`)
+        }
         continue
       }
       if (replies.length) {
@@ -89,7 +96,7 @@ export default async function handler(req, res) {
       // Statut d'abonnement HubSpot — fail-closed
       let subscription
       try {
-        subscription = await checkSubscription(record.email)
+        subscription = await checkSubscription(record.email, audience)
       } catch (err) {
         report.errors.push(`${record.email} : relance annulée, statut HubSpot indisponible (${err.message})`)
         continue
@@ -105,7 +112,7 @@ export default async function handler(req, res) {
       try {
         sent = await sendGmail({
           fromName: record.senderName, to: record.email, subject: record.followUp.subject,
-          text: withUnsubscribe(record.followUp.body, origin, record.email),
+          text: withUnsubscribe(record.followUp.body, origin, record.email, audience),
           threadId: record.threadId, inReplyTo: record.messageId,
         })
       } catch (err) {

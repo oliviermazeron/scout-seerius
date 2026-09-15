@@ -5,7 +5,9 @@
 //   contact:  { email, firstName, lastName, role },
 //   email:    { subject, body },
 //   followUp: { subject, body } | null,   // relance envoyée à J+7 sans réponse
-//   senderName
+//   senderName,
+//   audience: 'intermediaires' (défaut, SCOUT) | 'dirigeants' (SWIFT),
+//   dealId:   affaire « Deal sourcing » à passer à « Contactée » (SWIFT, facultatif)
 // }
 // → { record, quota }  |  { dryRun: true, preview }
 //
@@ -17,8 +19,8 @@
 import { setCors, requireAccess, publicOrigin, sendingWindow } from '../../access.js'
 import { configStatus, reportConfig, isDryRun, logDryRun } from '../../config.js'
 import { googleConfig, gmailAccount, sendGmail } from '../../google.js'
-import { upsertCompany, upsertContact, associateContactToCompany } from '../../hubspot-scout.js'
-import { checkSubscription } from '../../hubspot-comms.js'
+import { upsertCompany, upsertContact, associateContactToCompany, moveDealToStage } from '../../hubspot-scout.js'
+import { checkSubscription, isAudience, AUDIENCES, DEFAULT_AUDIENCE } from '../../hubspot-comms.js'
 import { emailProblems } from '../../../../src/services/emailGuard.js'
 import { redis, hgetJSON } from '../../redis.js'
 import {
@@ -34,10 +36,12 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Méthode non autorisée' })
   if (!requireAccess(req, res)) return
 
-  const { target, contact, email, followUp, senderName } = req.body ?? {}
+  const { target, contact, email, followUp, senderName, dealId } = req.body ?? {}
+  const audience = req.body?.audience ?? DEFAULT_AUDIENCE
+  if (!isAudience(audience)) return res.status(400).json({ error: `Audience inconnue : ${audience}` })
   const to = normEmail(contact?.email)
   if (!EMAIL_RE.test(to) || !target?.id || !target?.name || !email?.subject?.trim() || !email?.body?.trim()) {
-    return res.status(400).json({ error: 'Destinataire, cabinet, objet et texte requis' })
+    return res.status(400).json({ error: 'Destinataire, société, objet et texte requis' })
   }
   // Un gabarit incomplet est une erreur, pas un email à envoyer
   const incomplete = [
@@ -57,9 +61,12 @@ export default async function handler(req, res) {
   // ── Mode test : aucun appel réseau sortant, le contenu est journalisé ──────
   if (isDryRun()) {
     let text
-    try { text = withUnsubscribe(email.body, origin, to) } catch { text = `${email.body}\n\n—\n[lien de désinscription : OUTREACH_SECRET absent]` }
+    try { text = withUnsubscribe(email.body, origin, to, audience) } catch { text = `${email.body}\n\n—\n[lien de désinscription : OUTREACH_SECRET absent]` }
     const preview = {
       to,
+      audience,
+      subscriptionType: AUDIENCES[audience],
+      dealStage: dealId ? `affaire ${dealId} → Contactée (simulé)` : null,
       fromName: senderName ?? '',
       subject: email.subject,
       text,
@@ -107,13 +114,13 @@ export default async function handler(req, res) {
     // 2. Statut d'abonnement (token COMMS) — fail-closed
     let subscription
     try {
-      subscription = await checkSubscription(to)
+      subscription = await checkSubscription(to, audience)
     } catch (err) {
       console.warn(`[SCOUT] Envoi annulé pour ${to} : ${err.message}`)
       return res.status(503).json({ error: `Envoi annulé : statut d'abonnement HubSpot indisponible (${err.message})`, code: 'SUBSCRIPTION_CHECK_FAILED' })
     }
     if (subscription.unsubscribed) {
-      console.info(`[SCOUT] Envoi annulé : ${to} est désinscrit dans HubSpot (${subscription.unsubscribedFromAll ? 'toutes communications' : 'Prospection Seerius — intermédiaires'})`)
+      console.info(`[SCOUT] Envoi annulé : ${to} est désinscrit dans HubSpot (${subscription.unsubscribedFromAll ? 'toutes communications' : AUDIENCES[audience]})`)
       return res.status(409).json({ error: `${to} est désinscrit dans HubSpot`, code: 'UNSUBSCRIBED' })
     }
 
@@ -123,7 +130,7 @@ export default async function handler(req, res) {
     }
     let sent
     try {
-      sent = await sendGmail({ fromName: senderName, to, subject: email.subject, text: withUnsubscribe(email.body, origin, to) })
+      sent = await sendGmail({ fromName: senderName, to, subject: email.subject, text: withUnsubscribe(email.body, origin, to, audience) })
     } catch (err) {
       await releaseQuota(window.date)
       throw err
@@ -144,6 +151,8 @@ export default async function handler(req, res) {
       gmailId: sent.id,
       sentAt: now,
       status: 'sent',
+      audience,
+      dealId: dealId ? String(dealId) : null,
       contactId: hsContact.id,
       companyId: company.id ?? null,
       hubspotLogs: {
@@ -153,7 +162,8 @@ export default async function handler(req, res) {
     }
     await redis([
       ['HSET', SENDS_KEY, to, JSON.stringify(record)],
-      ['HSETNX', PIPELINE_KEY, target.id, JSON.stringify('Contacté')],
+      // Le suivi « Campagne » de SCOUT ne concerne que les intermédiaires
+      ...(audience === DEFAULT_AUDIENCE ? [['HSETNX', PIPELINE_KEY, target.id, JSON.stringify('Contacté')]] : []),
     ])
 
     try {
@@ -161,6 +171,16 @@ export default async function handler(req, res) {
       if (log?.state !== 'logged') console.warn(`[SCOUT] Email envoyé à ${to} mais non journalisé dans HubSpot : ${log?.error}`)
     } catch (err) {
       console.warn(`[SCOUT] Email envoyé à ${to} ; journalisation HubSpot à reprendre : ${err.message}`)
+    }
+
+    // Affaire « Deal sourcing » → « Contactée » (un échec n'annule pas l'envoi)
+    if (dealId) {
+      try {
+        const moved = await moveDealToStage(dealId, 'contacted')
+        if (!moved.ok) console.warn(`[SCOUT] Affaire ${dealId} non passée à « Contactée » : ${moved.error}`)
+      } catch (err) {
+        console.warn(`[SCOUT] Affaire ${dealId} non passée à « Contactée » : ${err.message}`)
+      }
     }
 
     let quota = null

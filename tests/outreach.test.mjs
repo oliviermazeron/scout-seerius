@@ -41,6 +41,16 @@ function resetWorld() {
     owners: [{ id: '87370009', email: 'olivier@seerius.ch', archived: false }],
     ownersFail: false,
     tasks: [],                       // corps POST /engagements/v1/engagements
+    unsubscribedDirigeants: new Set(), // désinscrits du type « Prospection Seerius — dirigeants »
+    pipelines: [{
+      id: 'pl-sourcing', label: 'Deal sourcing', stages: [
+        { id: 'st-q', label: 'Qualifiée' }, { id: 'st-c', label: 'Contactée' },
+        { id: 'st-e', label: 'Échange en cours' }, { id: 'st-n', label: 'NDA signé' },
+      ],
+    }],
+    deals: [],                       // corps POST /crm/v3/objects/deals
+    dealStages: {},                  // dealId → étape
+    dealPipelines: {},               // dealId → pipeline
     statusFail: null,    // 'http' | 'timeout' | '429once'
     emailLog: 'ok',      // 'ok' | 'error' | 'network'
     unsubscribeFail: false,
@@ -117,6 +127,21 @@ globalThis.fetch = async (url, opts = {}) => {
     const expected = isPrefs ? COMMS_TOKEN : SCOUT_KEY
     if (auth !== `Bearer ${expected}`) world.violations.push(`${method} ${path} appelé avec le mauvais identifiant`)
 
+    if (path === '/crm/v3/pipelines/deals') return reply({ results: world.pipelines })
+    if (path === '/crm/v3/objects/deals' && method === 'POST') {
+      world.deals.push(body)
+      const id = String(9000 + world.deals.length)
+      world.dealStages[id] = body.properties.dealstage
+      world.dealPipelines[id] = body.properties.pipeline
+      return reply({ id }, 201)
+    }
+    const dealMatch = path.match(/^\/crm\/v3\/objects\/deals\/(\d+)/)
+    if (dealMatch) {
+      const id = dealMatch[1]
+      if (method === 'PATCH') { world.dealStages[id] = body.properties.dealstage; return reply({ id }) }
+      return reply({ id, properties: { dealstage: world.dealStages[id], pipeline: world.dealPipelines[id] } })
+    }
+    if (/^\/crm\/v4\/objects\/deals\/\d+\/associations\/contacts\/\w+$/.test(path)) return reply({})
     if (path.startsWith('/crm/v3/owners')) {
       if (world.ownersFail) return reply({ message: "This app hasn't been granted all required scopes to make this call." }, 403)
       const email = new URL(u).searchParams.get('email')
@@ -129,8 +154,10 @@ globalThis.fetch = async (url, opts = {}) => {
     if (path === '/crm/v3/objects/companies') return reply({ id: 'c1' }, 201)
     if (path === '/crm/v3/objects/contacts') return reply({ id: 'p1' }, 201)
     if (path.includes('/associations/companies/')) return reply({})
-    if (path === '/crm/associations/2026-09/email/contact/labels') {
-      return reply({ results: [{ category: 'HUBSPOT_DEFINED', typeId: 198, label: null }] })
+    const labelsMatch = path.match(/^\/crm\/associations\/2026-09\/(\w+)\/(\w+)\/labels$/)
+    if (labelsMatch) {
+      const typeId = { 'email/contact': 198, 'deal/company': 5, 'deal/contact': 3 }[`${labelsMatch[1]}/${labelsMatch[2]}`]
+      return reply({ results: typeId ? [{ category: 'HUBSPOT_DEFINED', typeId, label: null }] : [] })
     }
     if (path === '/crm/v3/objects/emails') {
       world.emailPosts.push(body)
@@ -146,15 +173,16 @@ globalThis.fetch = async (url, opts = {}) => {
       if (world.definitions !== 'missing') {
         results.push({ id: '777', name: 'Prospection Seerius – intermédiaires', isActive: world.definitions !== 'inactive' })
       }
+      results.push({ id: '888', name: 'Prospection Seerius — dirigeants', isActive: true })
       return reply({ results })
     }
     const statusMatch = path.match(/^\/communication-preferences\/v4\/statuses\/([^/?]+)(\/unsubscribe-all)?/)
     if (statusMatch) {
       const email = decodeURIComponent(statusMatch[1])
       if (method === 'POST') {
-        if (body.subscriptionId !== 777) world.violations.push(`désinscription sur le type ${body.subscriptionId} au lieu de 777`)
+        if (![777, 888].includes(body.subscriptionId)) world.violations.push(`désinscription sur le type ${body.subscriptionId} hors périmètre`)
         if (world.unsubscribeFail) return reply({ message: 'Unavailable' }, 403)
-        world.unsubscribed.add(email)
+        ;(body.subscriptionId === 888 ? world.unsubscribedDirigeants : world.unsubscribed).add(email)
         return reply({ status: 'UNSUBSCRIBED' })
       }
       if (world.statusFail === 'timeout') throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' })
@@ -184,6 +212,7 @@ globalThis.fetch = async (url, opts = {}) => {
       return reply({ results: [
         { subscriptionId: 555, channel: 'EMAIL', status: world.unsubscribedOneToOne.has(email) ? 'UNSUBSCRIBED' : 'SUBSCRIBED' },
         { subscriptionId: 777, channel: 'EMAIL', status: world.unsubscribed.has(email) ? 'UNSUBSCRIBED' : 'NOT_SPECIFIED' },
+        { subscriptionId: 888, channel: 'EMAIL', status: world.unsubscribedDirigeants.has(email) ? 'UNSUBSCRIBED' : 'NOT_SPECIFIED' },
       ] })
     }
   }
@@ -611,6 +640,99 @@ test('envoi : email ou relance incomplets refusés avant tout appel', async () =
   const badFollowUp = sendBody('claire@etude.ch', { followUp: { subject: 'RE: Test', body: "(chiffre d'affaires , EBITDA rentable)" } })
   assert.equal((await call('outreach/send', { headers: ACCESS, body: badFollowUp })).status, 400)
   assert.equal(world.gmailSent.length, 0)
+})
+
+// ─── Audience « dirigeants » et affaires « Deal sourcing » (SWIFT) ────────────
+const swiftBody = (email, overrides = {}) => sendBody(email, {
+  target: { id: `swift:${email}`, name: 'Acme Industrie SA', domain: 'acme.ch' },
+  audience: 'dirigeants',
+  ...overrides,
+})
+const qualifyBody = (overrides = {}) => ({
+  target: { key: 'acme-industrie-sa', name: 'Acme Industrie SA', domain: 'acme.ch', canton: 'VD' },
+  contact: { email: 'pdg@acme.ch', firstName: 'Jean', lastName: 'Martin', role: 'CEO' },
+  qualification: { priority: '🔴', signal: 'Même administrateur depuis 1987', estimate: 'CA 10-20 MCHF (est.)' },
+  ...overrides,
+})
+const bodyText = (raw) => Buffer.from(raw.split('\r\n\r\n')[1].replace(/\r\n/g, ''), 'base64').toString('utf8')
+
+test('dirigeants : contrôle sur le type « dirigeants », indépendant des intermédiaires', async () => {
+  await connectGmail()
+  world.unsubscribedDirigeants.add('pdg@acme.ch')
+  const blocked = await call('outreach/send', { headers: ACCESS, body: swiftBody('pdg@acme.ch') })
+  assert.equal(blocked.status, 409)
+
+  world.unsubscribed.add('cfo@acme.ch') // désinscrit comme intermédiaire uniquement
+  const sent = await call('outreach/send', { headers: ACCESS, body: swiftBody('cfo@acme.ch') })
+  assert.equal(sent.status, 200)
+  assert.equal(sent.payload.record.audience, 'dirigeants')
+  assert.match(bodyText(world.gmailSent[0].raw), /unsubscribe\?e=cfo%40acme\.ch&a=dirigeants&t=/)
+  assert.equal(hash('scout:scout_campaign').size, 0, 'pas d\'entrée dans le suivi Campagne de SCOUT')
+})
+
+test('désinscription dirigeants : jeton lié à l\'audience, type « dirigeants » désinscrit', async () => {
+  const { emailToken } = await import('../api/_lib/access.js')
+  const forged = await call('outreach/unsubscribe', { method: 'GET', query: { e: 'pdg@acme.ch', a: 'dirigeants', t: emailToken('pdg@acme.ch') } })
+  assert.equal(forged.status, 400)
+  const post = await call('outreach/unsubscribe', { method: 'POST', body: { e: 'pdg@acme.ch', a: 'dirigeants', t: emailToken('pdg@acme.ch|dirigeants') } })
+  assert.equal(post.status, 200)
+  assert.ok(world.unsubscribedDirigeants.has('pdg@acme.ch'))
+  assert.ok(!world.unsubscribed.has('pdg@acme.ch'))
+})
+
+test('audience inconnue : envoi refusé', async () => {
+  const r = await call('outreach/send', { headers: ACCESS, body: swiftBody('x@acme.ch', { audience: 'tous' }) })
+  assert.equal(r.status, 400)
+})
+
+test('qualification : affaire « Deal sourcing » à l\'étape Qualifiée, assignée, associée, sans doublon', async () => {
+  const r = await call('outreach/qualify', { headers: ACCESS, body: qualifyBody() })
+  assert.equal(r.status, 200)
+  assert.equal(r.payload.deal.created, true)
+  const [deal] = world.deals
+  assert.equal(deal.properties.dealname, 'Sourcing — Acme Industrie SA')
+  assert.equal(deal.properties.pipeline, 'pl-sourcing')
+  assert.equal(deal.properties.dealstage, 'st-q')
+  assert.equal(deal.properties.hubspot_owner_id, '87370009')
+  assert.match(deal.properties.description, /Même administrateur depuis 1987/)
+  assert.deepEqual(deal.associations.map((a) => a.types[0].associationTypeId).sort(), [3, 5])
+
+  const again = await call('outreach/qualify', { headers: ACCESS, body: qualifyBody() })
+  assert.equal(again.payload.deal.created, false)
+  assert.equal(world.deals.length, 1)
+})
+
+test('qualification : pipeline ou étape introuvable → échec explicite, aucune affaire', async () => {
+  world.pipelines = [{ id: 'default', label: 'Pipeline des ventes', stages: [] }]
+  const r = await call('outreach/qualify', { headers: ACCESS, body: qualifyBody() })
+  assert.equal(r.status, 503)
+  assert.equal(r.payload.code, 'PIPELINE_NOT_FOUND')
+  assert.equal(world.deals.length, 0)
+})
+
+test('qualification en mode test : simulée, aucun appel réseau', async () => {
+  delete process.env.HUBSPOT_DRY_RUN
+  const r = await call('outreach/qualify', { headers: ACCESS, body: qualifyBody() })
+  assert.equal(r.payload.dryRun, true)
+  assert.equal(world.calls.length, 0)
+})
+
+test('affaire : Contactée à l\'envoi, Échange en cours à la réponse, jamais de recul', async () => {
+  await connectGmail()
+  const q = await call('outreach/qualify', { headers: ACCESS, body: qualifyBody() })
+  const dealId = q.payload.deal.dealId
+  await call('outreach/send', { headers: ACCESS, body: swiftBody('pdg@acme.ch', { dealId }) })
+  assert.equal(world.dealStages[dealId], 'st-c')
+
+  world.threads.get('t1').push({ labelIds: ['INBOX'], from: 'Jean Martin <pdg@acme.ch>', snippet: 'Avec plaisir, appelons-nous' })
+  await call('outreach/followups', { method: 'GET', headers: CRON })
+  assert.equal(world.dealStages[dealId], 'st-e')
+
+  world.dealStages[dealId] = 'st-n' // déplacée à la main à « NDA signé »
+  const { moveDealToStage } = await import('../api/_lib/hubspot-scout.js')
+  const r = await moveDealToStage(dealId, 'contacted')
+  assert.ok(r.skipped)
+  assert.equal(world.dealStages[dealId], 'st-n')
 })
 
 test('le registre des envois et des désinscriptions n\'est pas modifiable via /api/store', async () => {
