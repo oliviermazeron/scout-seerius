@@ -119,7 +119,10 @@ const CAMPAIGN_ID  = '__campaign__'
 const NOTICE_KEY = 'scout_notice_dismissed'
 
 export default function App() {
-  const [activeSegment, setActiveSegment]   = useState(SYNTHESIS_ID)
+  // Retour de la connexion Gmail (/?gmail=…) → page campagne
+  const [activeSegment, setActiveSegment]   = useState(
+    () => (new URLSearchParams(window.location.search).has('gmail') ? OUTREACH_ID : SYNTHESIS_ID)
+  )
   const [openGroups, setOpenGroups]         = useState({})
   const [noticeDismissed, setNoticeDismissed] = useState(
     () => localStorage.getItem(NOTICE_KEY) === '1'

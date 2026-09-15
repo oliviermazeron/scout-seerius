@@ -1,5 +1,12 @@
 {
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ]
+  ],
+  "crons": [
+    { "path": "/api/outreach/followups", "schedule": "0 7 * * 1-5" }
+  ],
+  "functions": {
+    "api/outreach/followups.js": { "maxDuration": 60 },
+    "api/outreach/send.js": { "maxDuration": 30 }
+  }
 }

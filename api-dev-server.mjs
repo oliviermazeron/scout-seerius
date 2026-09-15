@@ -4,9 +4,9 @@
 // En production Vercel, ce fichier n'est pas utilisé.
 
 import { createServer } from 'node:http'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -22,34 +22,41 @@ try {
   console.warn('⚠ .env.local introuvable')
 }
 
-// ── Importe les handlers API ───────────────────────────────────────────────
-const { default: hubspotHandler } = await import('./api/hubspot.js')
-const { default: hunterHandler  } = await import('./api/hunter.js')
-const { default: hubspotTasksHandler } = await import('./api/hubspot-tasks.js')
-const { default: storeHandler } = await import('./api/store.js')
+// ── Routage : /api/x/y → ./api/x/y.js (comme Vercel, hors dossiers _lib) ─────
+const handlers = new Map()
+
+async function loadHandler(pathname) {
+  if (!/^\/api(\/[a-z0-9-]+)+$/.test(pathname)) return null
+  if (handlers.has(pathname)) return handlers.get(pathname)
+  const file = join(__dirname, `${pathname}.js`)
+  if (!existsSync(file)) return null
+  const { default: handler } = await import(pathToFileURL(file).href)
+  handlers.set(pathname, handler)
+  return handler
+}
 
 // ── Serveur HTTP minimal ───────────────────────────────────────────────────
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost')
 
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-  if (req.method === 'OPTIONS') return res.writeHead(204).end()
-
-  // Lire le body JSON
+  // Lire le body (JSON ou formulaire)
   let body = {}
-  if (req.method === 'POST') {
+  if (req.method === 'POST' || req.method === 'DELETE') {
     const chunks = []
     for await (const chunk of req) chunks.push(chunk)
-    try { body = JSON.parse(Buffer.concat(chunks).toString()) } catch {}
+    const raw = Buffer.concat(chunks).toString()
+    if ((req.headers['content-type'] ?? '').includes('application/x-www-form-urlencoded')) {
+      body = Object.fromEntries(new URLSearchParams(raw))
+    } else {
+      try { body = JSON.parse(raw) } catch {}
+    }
   }
 
   // Adaptateur express-like
   const reqAdapter = {
     method: req.method,
     url: req.url,
+    headers: req.headers,
     body,
     query: Object.fromEntries(url.searchParams),
   }
@@ -62,15 +69,17 @@ const server = createServer(async (req, res) => {
       res.writeHead(this._status, { 'Content-Type': 'application/json', ...this._headers })
       res.end(JSON.stringify(data))
     },
-    end() { res.writeHead(this._status, this._headers); res.end() },
+    end(data) { res.writeHead(this._status, this._headers); res.end(data) },
   }
 
-  if (url.pathname === '/api/hubspot') return hubspotHandler(reqAdapter, resAdapter)
-  if (url.pathname === '/api/hunter')  return hunterHandler(reqAdapter, resAdapter)
-  if (url.pathname === '/api/hubspot-tasks') return hubspotTasksHandler(reqAdapter, resAdapter)
-  if (url.pathname === '/api/store') return storeHandler(reqAdapter, resAdapter)
-
-  res.writeHead(404).end('Not found')
+  try {
+    const handler = await loadHandler(url.pathname)
+    if (!handler) return res.writeHead(404).end('Not found')
+    return await handler(reqAdapter, resAdapter)
+  } catch (err) {
+    console.error(err)
+    if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: err.message }))
+  }
 })
 
 server.listen(3001, () => console.log('API dev server → http://localhost:3001'))

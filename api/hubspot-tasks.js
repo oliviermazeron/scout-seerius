@@ -60,8 +60,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Méthode non autorisée' })
 
-  const token = process.env.HUBSPOT_TOKEN
-  if (!token) return res.status(500).json({ error: 'HUBSPOT_TOKEN non configuré' })
+  const token = process.env.HUBSPOT_SCOUT_KEY || process.env.HUBSPOT_TOKEN
+  if (!token) return res.status(500).json({ error: 'Clé HubSpot SCOUT non configurée (HUBSPOT_SCOUT_KEY)' })
 
   const { tasks } = req.body ?? {}
   if (!tasks?.length) return res.status(400).json({ error: 'tasks[] requis' })
