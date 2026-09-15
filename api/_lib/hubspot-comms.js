@@ -101,7 +101,10 @@ export async function checkSubscription(email) {
   // Un tableau results[] est aussi accepté. Aucun statut lisible → on lève (fail-closed).
   const wideEntries = Array.isArray(wide.data?.results) ? wide.data.results : [wide.data]
   const wideStatuses = wideEntries.map((w) => w?.statusState ?? w?.status).filter((s) => ['SUBSCRIBED', 'UNSUBSCRIBED', 'NOT_SPECIFIED'].includes(s))
-  if (!wideStatuses.length) throw new Error('Réponse « désinscrit de tout » HubSpot illisible')
+  if (!wideStatuses.length) {
+    // Extrait de la réponse (statuts d'abonnement uniquement, aucun secret) pour le diagnostic
+    throw new Error(`Réponse « désinscrit de tout » HubSpot illisible : ${JSON.stringify(wide.data ?? null).slice(0, 400)}`)
+  }
   const unsubscribedFromAll = wideStatuses.includes('UNSUBSCRIBED')
 
   const value = {
