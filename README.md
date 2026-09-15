@@ -44,7 +44,7 @@ journalisations et désinscriptions en échec.
 | Variable | Identité HubSpot | Portées | Usage autorisé | Client |
 |---|---|---|---|---|
 | `HUBSPOT_SCOUT_KEY` (ou `HUBSPOT_TOKEN`, nom historique) | Clé de service « SCOUT » | `crm.objects.contacts.read/write`, `crm.objects.companies.read/write`, `sales-email-read` | Contacts et sociétés (sourcing) ; création de l'objet email et association au contact | `api/_lib/hubspot-scout.js` |
-| `HUBSPOT_COMMS_TOKEN` | Application privée héritée « SCOUT COMMS » | `crm.objects.contacts.read`, `sales-email-read`, `communication_preferences.read_write` | Lecture du statut d'abonnement (type « One to One » + désinscription totale) ; enregistrement des désinscriptions | `api/_lib/hubspot-comms.js` |
+| `HUBSPOT_COMMS_TOKEN` | Application privée héritée « SCOUT COMMS » | `crm.objects.contacts.read`, `sales-email-read`, `communication_preferences.read_write` | Lecture du statut d'abonnement (type « Prospection Seerius — intermédiaires » + désinscription totale) ; enregistrement des désinscriptions | `api/_lib/hubspot-comms.js` |
 
 Règles :
 
@@ -54,6 +54,10 @@ Règles :
   utilisé que par eux.
 - Les portées `crm.objects.emails.*` n'existent pas dans HubSpot : l'objet email
   est gouverné par les portées contacts + `sales-email-read`.
+- Type d'abonnement visé : « Prospection Seerius — intermédiaires » (français).
+  Son ID est lu via l'API des définitions et mis en cache en mémoire ; s'il est
+  introuvable, inactif ou en double, l'envoi échoue explicitement (aucun repli
+  sur « One to One » ou « Marketing Information », hors périmètre SCOUT).
 - HubSpot est la référence du consentement. Le registre Redis des désinscriptions
   ne sert qu'à bloquer l'envoi tant qu'une désinscription reçue n'a pas pu être
   enregistrée dans HubSpot, et à la réessayer.

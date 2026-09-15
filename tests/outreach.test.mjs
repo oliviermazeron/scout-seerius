@@ -33,8 +33,10 @@ function resetWorld() {
     violations: [],      // mauvais identifiant HubSpot utilisé
     gmailSent: [],       // { id, threadId, raw }
     threads: new Map(),  // threadId → [{ labelIds, from, snippet }]
-    unsubscribed: new Set(),
+    unsubscribed: new Set(),         // désinscrits du type « Prospection Seerius — intermédiaires »
+    unsubscribedOneToOne: new Set(), // désinscrits du type « One to One » (hors périmètre)
     unsubscribedAll: new Set(),
+    definitions: 'ok',               // 'ok' | 'missing' | 'inactive'
     statusFail: null,    // 'http' | 'timeout' | '429once'
     emailLog: 'ok',      // 'ok' | 'error' | 'network'
     unsubscribeFail: false,
@@ -124,15 +126,20 @@ globalThis.fetch = async (url, opts = {}) => {
       return reply({ id: `e${world.emailPosts.length}` }, 201)
     }
     if (path === '/communication-preferences/v4/definitions') {
-      return reply({ results: [
+      const results = [
         { id: '444', name: 'Marketing Information', isActive: true },
         { id: '555', name: 'One to One', isActive: true, isDefault: true },
-      ] })
+      ]
+      if (world.definitions !== 'missing') {
+        results.push({ id: '777', name: 'Prospection Seerius – intermédiaires', isActive: world.definitions !== 'inactive' })
+      }
+      return reply({ results })
     }
     const statusMatch = path.match(/^\/communication-preferences\/v4\/statuses\/([^/?]+)(\/unsubscribe-all)?/)
     if (statusMatch) {
       const email = decodeURIComponent(statusMatch[1])
       if (method === 'POST') {
+        if (body.subscriptionId !== 777) world.violations.push(`désinscription sur le type ${body.subscriptionId} au lieu de 777`)
         if (world.unsubscribeFail) return reply({ message: 'Unavailable' }, 403)
         world.unsubscribed.add(email)
         return reply({ status: 'UNSUBSCRIBED' })
@@ -146,7 +153,10 @@ globalThis.fetch = async (url, opts = {}) => {
       if (statusMatch[2]) {
         return reply({ results: world.unsubscribedAll.has(email) ? [{ wideStatusType: 'PORTAL_WIDE', statusState: 'UNSUBSCRIBED' }] : [] })
       }
-      return reply({ results: [{ subscriptionId: 555, channel: 'EMAIL', status: world.unsubscribed.has(email) ? 'UNSUBSCRIBED' : 'SUBSCRIBED' }] })
+      return reply({ results: [
+        { subscriptionId: 555, channel: 'EMAIL', status: world.unsubscribedOneToOne.has(email) ? 'UNSUBSCRIBED' : 'SUBSCRIBED' },
+        { subscriptionId: 777, channel: 'EMAIL', status: world.unsubscribed.has(email) ? 'UNSUBSCRIBED' : 'NOT_SPECIFIED' },
+      ] })
     }
   }
 
@@ -266,13 +276,36 @@ test('sans HUBSPOT_COMMS_TOKEN : envoi refusé, aucun email', async () => {
   assert.equal(world.gmailSent.length, 0)
 })
 
-test('destinataire désinscrit du type One to One : pas d\'envoi', async () => {
+test('destinataire désinscrit de « Prospection Seerius — intermédiaires » : pas d\'envoi', async () => {
   await connectGmail()
   world.unsubscribed.add('claire@etude.ch')
   const r = await call('outreach/send', { headers: ACCESS, body: sendBody('claire@etude.ch') })
   assert.equal(r.status, 409)
   assert.equal(r.payload.code, 'UNSUBSCRIBED')
   assert.equal(world.gmailSent.length, 0)
+})
+
+test('seul le type « Prospection Seerius — intermédiaires » est visé (One to One hors périmètre)', async () => {
+  await connectGmail()
+  world.unsubscribedOneToOne.add('claire@etude.ch')
+  const r = await call('outreach/send', { headers: ACCESS, body: sendBody('claire@etude.ch') })
+  assert.equal(r.status, 200)
+  assert.equal(world.gmailSent.length, 1)
+})
+
+test('type d\'abonnement introuvable ou inactif : échec explicite, pas d\'envoi ni de repli', async () => {
+  await connectGmail()
+  const { clearCommsCache } = await import('../api/_lib/hubspot-comms.js')
+  for (const state of ['missing', 'inactive']) {
+    clearCommsCache()
+    world.definitions = state
+    const r = await call('outreach/send', { headers: ACCESS, body: sendBody(`${state}@etude.ch`) })
+    assert.equal(r.status, 503, state)
+    assert.equal(r.payload.code, 'SUBSCRIPTION_CHECK_FAILED')
+    assert.match(r.payload.error, /Prospection Seerius — intermédiaires/)
+  }
+  assert.equal(world.gmailSent.length, 0)
+  assert.equal(world.calls.filter((c) => /\/statuses\//.test(c.url)).length, 0, 'aucune lecture de statut sur un autre type')
 })
 
 test('destinataire désinscrit de toutes les communications : pas d\'envoi', async () => {

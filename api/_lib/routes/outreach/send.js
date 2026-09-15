@@ -107,7 +107,7 @@ export default async function handler(req, res) {
       return res.status(503).json({ error: `Envoi annulé : statut d'abonnement HubSpot indisponible (${err.message})`, code: 'SUBSCRIPTION_CHECK_FAILED' })
     }
     if (subscription.unsubscribed) {
-      console.info(`[SCOUT] Envoi annulé : ${to} est désinscrit dans HubSpot (${subscription.unsubscribedFromAll ? 'toutes communications' : 'One to One'})`)
+      console.info(`[SCOUT] Envoi annulé : ${to} est désinscrit dans HubSpot (${subscription.unsubscribedFromAll ? 'toutes communications' : 'Prospection Seerius — intermédiaires'})`)
       return res.status(409).json({ error: `${to} est désinscrit dans HubSpot`, code: 'UNSUBSCRIBED' })
     }
 
