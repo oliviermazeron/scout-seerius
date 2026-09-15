@@ -38,6 +38,9 @@ function resetWorld() {
     unsubscribedAll: new Set(),
     definitions: 'ok',               // 'ok' | 'missing' | 'inactive'
     wideShape: 'observed',           // 'observed' (production) | 'object' (documentée) | 'unreadable'
+    owners: [{ id: '87370009', email: 'olivier@seerius.ch', archived: false }],
+    ownersFail: false,
+    tasks: [],                       // corps POST /engagements/v1/engagements
     statusFail: null,    // 'http' | 'timeout' | '429once'
     emailLog: 'ok',      // 'ok' | 'error' | 'network'
     unsubscribeFail: false,
@@ -114,6 +117,15 @@ globalThis.fetch = async (url, opts = {}) => {
     const expected = isPrefs ? COMMS_TOKEN : SCOUT_KEY
     if (auth !== `Bearer ${expected}`) world.violations.push(`${method} ${path} appelé avec le mauvais identifiant`)
 
+    if (path.startsWith('/crm/v3/owners')) {
+      if (world.ownersFail) return reply({ message: "This app hasn't been granted all required scopes to make this call." }, 403)
+      const email = new URL(u).searchParams.get('email')
+      return reply({ results: world.owners.filter((o) => o.email === email) })
+    }
+    if (path === '/engagements/v1/engagements') {
+      world.tasks.push(body)
+      return reply({ engagement: { id: world.tasks.length } })
+    }
     if (path === '/crm/v3/objects/companies') return reply({ id: 'c1' }, 201)
     if (path === '/crm/v3/objects/contacts') return reply({ id: 'p1' }, 201)
     if (path.includes('/associations/companies/')) return reply({})
@@ -236,6 +248,8 @@ beforeEach(async () => {
   setNow(MONDAY_10H_ZURICH)
   const { clearCommsCache } = await import('../api/_lib/hubspot-comms.js')
   clearCommsCache()
+  const { clearScoutCache } = await import('../api/_lib/hubspot-scout.js')
+  clearScoutCache()
 })
 
 afterEach(() => {
@@ -535,6 +549,68 @@ test('désinscription non enregistrée dans HubSpot : bloque l\'envoi puis se ra
   const r = await call('outreach/followups', { method: 'GET', headers: CRON })
   assert.equal(r.payload.optOutsSynced, 1)
   assert.ok(world.unsubscribed.has('claire@etude.ch'))
+})
+
+// ─── Tâches HubSpot ───────────────────────────────────────────────────────────
+const TASK_TEMPLATE = "Objet : Dossiers de cession PME\n\nMaître Bagnoud,\n\nTexte complet.\n\nOlivier Mazeron\nSeerius"
+
+test('tâche valide : propriétaire, associations société + contact, corps HTML', async () => {
+  const r = await call('hubspot-tasks', { body: { tasks: [
+    { companyName: 'Étude Test SA', companyId: '447930233034', contactName: 'Valentine Bagnoud', contactId: '868662795469', template: TASK_TEMPLATE, subject: '✉️ Deal flow · Avocat' },
+  ] } })
+  assert.equal(r.status, 200)
+  assert.equal(r.payload.created, 1)
+  const [task] = world.tasks
+  assert.equal(task.engagement.ownerId, 87370009)
+  assert.deepEqual(task.associations.companyIds, [447930233034])
+  assert.deepEqual(task.associations.contactIds, [868662795469])
+  assert.ok(task.metadata.body.includes('<br>') && !task.metadata.body.includes('\n'))
+})
+
+test('tâche sans société ou contact non associé : lot refusé, rien n\'est créé', async () => {
+  const noCompany = await call('hubspot-tasks', { body: { tasks: [{ companyName: 'Étude Test SA', template: TASK_TEMPLATE }] } })
+  assert.equal(noCompany.status, 400)
+  assert.ok(noCompany.payload.problems.some((p) => p.includes('société HubSpot non associée')))
+  const noContact = await call('hubspot-tasks', { body: { tasks: [{ companyName: 'Étude Test SA', companyId: 'c1', contactName: 'Valentine Bagnoud', template: TASK_TEMPLATE }] } })
+  assert.equal(noContact.status, 400)
+  assert.ok(noContact.payload.problems.some((p) => p.includes('contact HubSpot non associé')))
+  assert.equal(world.tasks.length, 0)
+})
+
+test('gabarit incomplet dans un lot : tout le lot est refusé, aucune tâche créée', async () => {
+  const r = await call('hubspot-tasks', { body: { tasks: [
+    { companyName: 'A', companyId: 'c1', template: TASK_TEMPLATE },
+    { companyName: 'B', companyId: 'c2', template: "Objet : Test\n\n• Chiffre d'affaires : \n\n[Prénom Nom] — Seerius" },
+  ] } })
+  assert.equal(r.status, 400)
+  assert.ok(r.payload.problems.some((p) => p.includes('critère sans valeur')))
+  assert.ok(r.payload.problems.some((p) => p.includes('placeholder')))
+  assert.equal(world.tasks.length, 0)
+})
+
+test('propriétaire introuvable ou illisible : échec explicite, aucune tâche non assignée', async () => {
+  world.ownersFail = true
+  const denied = await call('hubspot-tasks', { body: { tasks: [{ companyName: 'A', companyId: 'c1', template: TASK_TEMPLATE }] } })
+  assert.equal(denied.status, 503)
+  assert.equal(denied.payload.code, 'OWNER_LOOKUP_FAILED')
+
+  world.ownersFail = false
+  world.owners = []
+  const missing = await call('hubspot-tasks', { body: { tasks: [{ companyName: 'A', companyId: 'c1', template: TASK_TEMPLATE }] } })
+  assert.equal(missing.status, 503)
+  assert.equal(missing.payload.code, 'OWNER_NOT_FOUND')
+  assert.equal(world.tasks.length, 0)
+})
+
+test('envoi : email ou relance incomplets refusés avant tout appel', async () => {
+  await connectGmail()
+  const holey = sendBody('claire@etude.ch', { email: { subject: 'Test', body: "• Chiffre d'affaires : \n\nOlivier" } })
+  const r = await call('outreach/send', { headers: ACCESS, body: holey })
+  assert.equal(r.status, 400)
+  assert.equal(r.payload.code, 'INCOMPLETE_EMAIL')
+  const badFollowUp = sendBody('claire@etude.ch', { followUp: { subject: 'RE: Test', body: "(chiffre d'affaires , EBITDA rentable)" } })
+  assert.equal((await call('outreach/send', { headers: ACCESS, body: badFollowUp })).status, 400)
+  assert.equal(world.gmailSent.length, 0)
 })
 
 test('le registre des envois et des désinscriptions n\'est pas modifiable via /api/store', async () => {

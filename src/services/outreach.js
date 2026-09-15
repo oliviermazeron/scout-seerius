@@ -6,6 +6,7 @@
 // Cibles, statuts et réglages sont partagés (store.js) ; la signature reste propre au navigateur.
 
 import { saveShared } from './store.js'
+import { assertCompleteEmail, IncompleteEmailError } from './emailGuard.js'
 
 export const OUTREACH_ID = '__outreach_juridique__'
 
@@ -109,8 +110,9 @@ function salutation(segment, contact) {
   return name ? `Bonjour ${name},` : 'Madame, Monsieur,'
 }
 
+// Le nom du signataire est obligatoire (vérifié dans buildEmail) : pas de placeholder
 function signature(sender) {
-  return [sender?.name || '[Prénom Nom]', sender?.title, 'Seerius', sender?.phone].filter(Boolean).join('\n')
+  return [sender.name.trim(), sender.title?.trim(), 'Seerius', sender.phone?.trim()].filter(Boolean).join('\n')
 }
 
 function inPerson(city) {
@@ -254,14 +256,37 @@ function dealflowFollowUp(target, contact, sender, subject, criteria) {
 // ─── API ──────────────────────────────────────────────────────────────────────
 // target: { segment, name, municipality } · contact: { firstName, lastName }
 // sender: { name, title, phone } · settings: { objective, criteria }
+// Lève IncompleteEmailError si une donnée requise manque ou si le résultat
+// contient un trou (placeholder, critère vide…) : jamais d'email incomplet.
+
+function missingData(target, sender, settings) {
+  const missing = []
+  if (!String(target?.name ?? '').trim()) missing.push('société du contact manquante')
+  if (!String(sender?.name ?? '').trim()) missing.push('nom du signataire manquant (« Votre signature »)')
+  if (settings?.objective !== 'partenariat') {
+    for (const field of DEAL_CRITERIA_FIELDS) {
+      if (!String(settings?.criteria?.[field.id] ?? '').trim()) missing.push(`critère « ${field.label} » vide`)
+    }
+  }
+  return missing
+}
+
+function checked(build, target, sender, settings) {
+  const missing = missingData(target, sender, settings)
+  if (missing.length) throw new IncompleteEmailError(missing)
+  const email = build()
+  assertCompleteEmail(email)
+  return email
+}
+
 export function buildEmail(target, contact, sender, settings = DEFAULT_SETTINGS) {
-  return settings.objective === 'partenariat'
+  return checked(() => (settings.objective === 'partenariat'
     ? partnerEmail(target, contact, sender)
-    : dealflowEmail(target, contact, sender, settings.criteria)
+    : dealflowEmail(target, contact, sender, settings.criteria)), target, sender, settings)
 }
 
 export function buildFollowUp(target, contact, sender, subject, settings = DEFAULT_SETTINGS) {
-  return settings.objective === 'partenariat'
+  return checked(() => (settings.objective === 'partenariat'
     ? partnerFollowUp(target, contact, sender, subject)
-    : dealflowFollowUp(target, contact, sender, subject, settings.criteria)
+    : dealflowFollowUp(target, contact, sender, subject, settings.criteria)), target, sender, settings)
 }

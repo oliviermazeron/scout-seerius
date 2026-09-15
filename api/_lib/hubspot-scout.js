@@ -114,6 +114,75 @@ export function emailPayload({ contactId, subject, text, from, to, timestamp, as
   }
 }
 
+// ─── Tâches (API Engagements v1, héritée) ─────────────────────────────────────
+let taskOwnerIdCache = null
+const DAY_MS = 24 * 60 * 60 * 1000
+
+export function clearScoutCache() {
+  taskOwnerIdCache = null
+  emailToContactTypeId = null
+}
+
+// Propriétaire des tâches : lu via l'API owners, mis en cache en mémoire.
+// Portée requise : crm.objects.owners.read. Introuvable → échec explicite,
+// jamais de tâche non assignée.
+// Doc : https://developers.hubspot.com/docs/api-reference/latest/crm/owners/get-owners
+export async function taskOwnerId() {
+  if (taskOwnerIdCache) return taskOwnerIdCache
+  const email = String(process.env.HUBSPOT_TASK_OWNER_EMAIL || 'olivier@seerius.ch').trim().toLowerCase()
+  const r = await request(`/crm/v3/owners?email=${encodeURIComponent(email)}&limit=1`)
+  if (!r.ok) {
+    throw Object.assign(
+      new Error(`Propriétaire HubSpot illisible pour ${email} (HTTP ${r.status}${r.data?.message ? ` : ${r.data.message}` : ''})`),
+      { code: 'OWNER_LOOKUP_FAILED' },
+    )
+  }
+  const owner = (r.data.results ?? []).find((o) => String(o.email ?? '').toLowerCase() === email && !o.archived)
+  if (!owner) throw Object.assign(new Error(`Propriétaire HubSpot introuvable pour ${email}`), { code: 'OWNER_NOT_FOUND' })
+  taskOwnerIdCache = owner.id
+  return taskOwnerIdCache
+}
+
+// Le corps de tâche HubSpot est du HTML : un seul chemin de formatage pour tous les gabarits
+function textToHtml(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>')
+}
+
+// Crée une tâche email assignée et associée (société obligatoire, contact si fourni).
+// Doc : https://developers.hubspot.com/docs/api-reference/legacy/crm-engagements-v1/post-engagements-v1-engagements
+export async function createTask({ subject, template, companyId, contactId, ownerId, dueInDays = 2 }) {
+  const r = await request('/engagements/v1/engagements', {
+    method: 'POST',
+    body: {
+      engagement: {
+        active: true,
+        type: 'TASK',
+        ownerId: Number(ownerId),
+        timestamp: Date.now() + Number(dueInDays) * DAY_MS,
+      },
+      associations: {
+        companyIds: [Number(companyId)],
+        contactIds: contactId ? [Number(contactId)] : [],
+        dealIds: [],
+        ownerIds: [],
+        ticketIds: [],
+      },
+      metadata: {
+        subject,
+        body: textToHtml(template),
+        status: 'NOT_STARTED',
+        taskType: 'EMAIL',
+        priority: 'MEDIUM',
+      },
+    },
+  })
+  return r.ok ? { ok: true, taskId: r.data?.engagement?.id } : { ok: false, error: r.data?.message ?? `HTTP ${r.status}` }
+}
+
 export async function logEmail(email) {
   const associationTypeId = await emailToContactType()
   const r = await request('/crm/v3/objects/emails', { method: 'POST', body: emailPayload({ ...email, associationTypeId }) })

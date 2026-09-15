@@ -4,6 +4,7 @@ import {
   readSettings, writeSettings, readPipeline, setPipelineStatus, buildEmail, buildFollowUp,
 } from '../services/outreach.js'
 import { secureFetch, getAccessCode, setAccessCode } from '../services/access.js'
+import { emailProblems } from '../services/emailGuard.js'
 import { StatusSelect } from './ContactTable.jsx'
 import './OutreachPanel.css'
 
@@ -145,8 +146,10 @@ function GmailCard({ gmail, notice, checking, checkResult, onUnlock, onConnect, 
 }
 
 // ─── Panneau d'édition d'une cible (destinataire + email) ────────────────────
-function TargetEditor({ t, email, edited, hunter, record, sendState, pushState, followUp, gmailReady, onNavigate,
+function TargetEditor({ t, emailState, edited, hunter, record, sendState, pushState, followUp, gmailReady, onNavigate,
   onSearchDomain, onFindPerson, onChoose, onDraft, onSend, onPush }) {
+  const { email, problems } = emailState
+  const incomplete = problems.length > 0
   const [manual, setManual] = useState(() => ({
     firstName: t.contact?.firstName ?? '',
     lastName:  t.contact?.lastName ?? '',
@@ -260,25 +263,35 @@ function TargetEditor({ t, email, edited, hunter, record, sendState, pushState, 
       {/* ── 2. Email ── */}
       <div className="op-editor-col">
         <div className="op-editor-title">2 · Email {edited && <span className="op-edited">modifié</span>}</div>
-        <label className="op-field-label" htmlFor={`subject-${t.id}`}>Objet</label>
-        <input
-          id={`subject-${t.id}`}
-          className="op-subject"
-          value={email.subject}
-          onChange={(e) => onDraft(t, { ...email, subject: e.target.value })}
-        />
-        <textarea
-          className="op-body"
-          value={email.body}
-          rows={18}
-          onChange={(e) => onDraft(t, { ...email, body: e.target.value })}
-        />
+        {incomplete && (
+          <div className="op-incomplete">
+            <strong>Email incomplet : envoi et tâche bloqués</strong>
+            <ul>{problems.map((p) => <li key={p}>{p}</li>)}</ul>
+          </div>
+        )}
+        {email && (
+          <>
+            <label className="op-field-label" htmlFor={`subject-${t.id}`}>Objet</label>
+            <input
+              id={`subject-${t.id}`}
+              className="op-subject"
+              value={email.subject}
+              onChange={(e) => onDraft(t, { ...email, subject: e.target.value })}
+            />
+            <textarea
+              className="op-body"
+              value={email.body}
+              rows={18}
+              onChange={(e) => onDraft(t, { ...email, body: e.target.value })}
+            />
+          </>
+        )}
         <div className="op-editor-actions">
-          <button className="op-btn-light" onClick={copy}>{copied ? '✓ Copié' : '📋 Copier'}</button>
+          <button className="op-btn-light" onClick={copy} disabled={!email || incomplete}>{copied ? '✓ Copié' : '📋 Copier'}</button>
           {edited && <button className="op-btn-light" onClick={() => onDraft(t, null)}>↺ Revenir au modèle</button>}
           <span className="op-spacer" />
-          <PushButton t={t} state={pushState} onPush={onPush} />
-          <SendButton t={t} record={record} state={sendState} gmailReady={gmailReady} onSend={onSend} />
+          <PushButton t={t} state={pushState} incomplete={incomplete} onPush={onPush} />
+          <SendButton t={t} record={record} state={sendState} gmailReady={gmailReady} incomplete={incomplete} onSend={onSend} />
         </div>
         <div className="op-muted op-push-note">
           <strong>✉️ Envoyer</strong> : part immédiatement depuis Gmail et s'enregistre dans HubSpot
@@ -292,7 +305,7 @@ function TargetEditor({ t, email, edited, hunter, record, sendState, pushState, 
   )
 }
 
-function SendButton({ t, record, state, gmailReady, onSend }) {
+function SendButton({ t, record, state, gmailReady, incomplete, onSend }) {
   if (record) return <SendBadge record={record} />
   if (state === 'loading') return <button className="op-btn-send" disabled>Envoi…</button>
   return (
@@ -301,8 +314,8 @@ function SendButton({ t, record, state, gmailReady, onSend }) {
       {state && !['done', 'dry'].includes(state) && <span className="op-error" title={state}>⚠️ {state}</span>}
       <button
         className="op-btn-send"
-        disabled={!t.contact?.email || !gmailReady}
-        title={!gmailReady ? 'Connectez Gmail en haut de la page' : t.contact?.email ? '' : "Choisissez d'abord un destinataire avec email"}
+        disabled={!t.contact?.email || !gmailReady || incomplete}
+        title={incomplete ? 'Email incomplet : corrigez les points signalés' : !gmailReady ? 'Connectez Gmail en haut de la page' : t.contact?.email ? '' : "Choisissez d'abord un destinataire avec email"}
         onClick={() => onSend(t)}
       >
         ✉️ Envoyer
@@ -311,15 +324,15 @@ function SendButton({ t, record, state, gmailReady, onSend }) {
   )
 }
 
-function PushButton({ t, state, onPush }) {
+function PushButton({ t, state, incomplete, onPush }) {
   if (state === 'loading') return <button className="op-btn-hs" disabled>Création…</button>
   return (
     <>
       {state && state !== 'done' && <span className="op-error" title={state}>⚠️ {state}</span>}
       <button
         className="op-btn-hs"
-        disabled={!t.contact?.email}
-        title={t.contact?.email ? 'Crée le contact et une tâche email dans HubSpot, pour un envoi manuel' : "Choisissez d'abord un destinataire avec email"}
+        disabled={!t.contact?.email || incomplete}
+        title={incomplete ? 'Email incomplet : corrigez les points signalés' : t.contact?.email ? 'Crée le contact et une tâche email dans HubSpot, pour un envoi manuel' : "Choisissez d'abord un destinataire avec email"}
         onClick={() => onPush(t)}
       >
         {t.hubspot ? '↻ Tâche HubSpot' : '📋 Tâche HubSpot'}
@@ -471,7 +484,23 @@ export default function OutreachPanel({ onNavigate }) {
   // Un brouillon modifié n'est valable que pour l'objectif avec lequel il a été rédigé
   const isEdited = (t) => t.draft?.objective === settings.objective
   const setDraft = (t, draft) => updateTarget(t.id, { draft: draft && { ...draft, objective: settings.objective } })
-  const emailFor = (t) => (isEdited(t) ? t.draft : buildEmail(t, t.contact, sender, settings))
+  // Brouillon modifié : affiché tel quel avec ses défauts ; sinon gabarit, qui lève
+  // si une donnée manque (signature, société, critère) — jamais d'email troué
+  function emailState(t) {
+    if (isEdited(t)) return { email: t.draft, problems: emailProblems(t.draft) }
+    try {
+      return { email: buildEmail(t, t.contact, sender, settings), problems: [] }
+    } catch (err) {
+      return { email: null, problems: err.problems ?? [err.message] }
+    }
+  }
+
+  // Pour l'envoi et les tâches : lève si l'email est incomplet
+  function emailFor(t) {
+    const { email, problems } = emailState(t)
+    if (problems.length) throw Object.assign(new Error(`Email incomplet : ${problems.join(' ; ')}`), { problems })
+    return email
+  }
 
   function toggleSelect(id) {
     setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -517,10 +546,15 @@ export default function OutreachPanel({ onNavigate }) {
   async function sendOne(t, ask = true) {
     const c = t.contact
     if (!c?.email || recordFor(t)) return { ok: false }
-    const email = emailFor(t)
-    if (email.body.includes('[Prénom Nom]')) {
-      setSend((s) => ({ ...s, [t.id]: 'Renseignez votre signature' }))
-      return { ok: false, stop: true }
+    let email
+    let followUpMail
+    try {
+      email = emailFor(t)
+      followUpMail = followUp ? buildFollowUp(t, c, sender, email.subject, settings) : null
+    } catch (err) {
+      setSend((s) => ({ ...s, [t.id]: err.message }))
+      // Donnée globale manquante (signature, critère) : inutile de poursuivre un envoi groupé
+      return { ok: false, stop: !isEdited(t) }
     }
     const who = `${fullName(c) || c.email} <${c.email}>`
     const intro = gmail.dryRun ? '[MODE TEST — rien ne partira] Simuler' : 'Envoyer maintenant'
@@ -535,7 +569,7 @@ export default function OutreachPanel({ onNavigate }) {
         target: { id: t.id, name: t.name, domain: t.domain, canton: t.canton, uid: t.uid, segment: t.segment },
         contact: c,
         email,
-        followUp: followUp ? buildFollowUp(t, c, sender, email.subject, settings) : null,
+        followUp: followUpMail,
         senderName: sender.name,
         objective: settings.objective,
       },
@@ -586,6 +620,10 @@ export default function OutreachPanel({ onNavigate }) {
     if (!c?.email) return false
     setPush((p) => ({ ...p, [t.id]: 'loading' }))
     try {
+      // Gabarits complets avant tout appel HubSpot : un gabarit incomplet est une erreur
+      const email = emailFor(t)
+      const followUpMail = followUp ? buildFollowUp(t, c, sender, email.subject, settings) : null
+
       const hs = await postJSON('/api/hubspot', {
         name: t.name,
         domain: t.domain ?? undefined,
@@ -599,15 +637,14 @@ export default function OutreachPanel({ onNavigate }) {
       if (!hs.ok || !contactId) throw new Error(hs.data.error ?? 'Contact HubSpot non créé')
 
       const who = fullName(c) || c.email
-      const email = emailFor(t)
       const objective = OBJECTIVES[settings.objective].label
       const tasks = [{
         companyName: t.name, contactName: who, companyId, contactId, dueInDays: 0,
         subject: `✉️ ${objective} · ${JURIDIQUE_SEGMENTS[t.segment].short} — ${who} · ${t.name}`,
         template: `Objet : ${email.subject}\n\n${email.body}`,
       }]
-      if (followUp) {
-        const f = buildFollowUp(t, c, sender, email.subject, settings)
+      if (followUpMail) {
+        const f = followUpMail
         tasks.push({
           companyName: t.name, contactName: who, companyId, contactId, dueInDays: 7,
           subject: `🔁 Relance J+7 · ${objective} — ${who} · ${t.name}`,
@@ -616,7 +653,7 @@ export default function OutreachPanel({ onNavigate }) {
       }
       const tr = await postJSON('/api/hubspot-tasks', { tasks })
       if (!tr.ok || tr.data.created < tasks.length) {
-        throw new Error(tr.data.error ?? `${tasks.length - (tr.data.created ?? 0)} tâche(s) non créée(s)`)
+        throw new Error(tr.data.problems?.join(' · ') ?? tr.data.error ?? `${tasks.length - (tr.data.created ?? 0)} tâche(s) non créée(s)`)
       }
 
       updateTarget(t.id, { hubspot: { pushedAt: Date.now(), contactId, companyId, followUp, objective: settings.objective } })
@@ -687,7 +724,7 @@ export default function OutreachPanel({ onNavigate }) {
           <input placeholder="Fonction (ex. Associé)" value={sender.title} onChange={(e) => updateSender('title', e.target.value)} />
           <input placeholder="Téléphone" value={sender.phone} onChange={(e) => updateSender('phone', e.target.value)} />
         </div>
-        {!sender.name && <div className="op-warn">Renseignez votre nom : il remplace « [Prénom Nom] » dans tous les emails.</div>}
+        {!sender.name?.trim() && <div className="op-warn">Renseignez votre nom : sans signature, aucun email ni tâche ne peut être généré.</div>}
       </div>
 
       <div className="op-sender">
@@ -710,10 +747,19 @@ export default function OutreachPanel({ onNavigate }) {
               {DEAL_CRITERIA_FIELDS.map((f) => (
                 <label key={f.id} className="op-criterion">
                   <span>{f.label}</span>
-                  <input value={settings.criteria[f.id]} onChange={(e) => setCriterion(f.id, e.target.value)} />
+                  <input
+                    className={String(settings.criteria[f.id] ?? '').trim() ? '' : 'op-input--missing'}
+                    value={settings.criteria[f.id]}
+                    onChange={(e) => setCriterion(f.id, e.target.value)}
+                  />
                 </label>
               ))}
             </div>
+            {DEAL_CRITERIA_FIELDS.some((f) => !String(settings.criteria[f.id] ?? '').trim()) && (
+              <div className="op-incomplete">
+                Critère vide : aucun email deal flow ni tâche ne sera généré tant que tous les critères ne sont pas renseignés.
+              </div>
+            )}
             <div className="op-warn">
               Ces critères d'acquisition figurent dans chaque email deal flow : validez-les avant d'envoyer. Ils sont partagés avec l'équipe.
             </div>
@@ -862,7 +908,7 @@ export default function OutreachPanel({ onNavigate }) {
                           <TargetEditor
                             key={`${t.id}-${t.contact?.email ?? ''}`}
                             t={t}
-                            email={emailFor(t)}
+                            emailState={emailState(t)}
                             edited={isEdited(t)}
                             hunter={hunter}
                             record={record}

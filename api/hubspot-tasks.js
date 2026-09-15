@@ -1,56 +1,34 @@
-// ─── Création de tâches HubSpot (email à envoyer) ────────────────────────────
+// ─── Création de tâches HubSpot (email à envoyer manuellement) ───────────────
 // POST /api/hubspot-tasks
-// Body: { tasks: [{ companyName, contactName, template, companyId?, contactId?, subject?, dueInDays? }] }
+// Body: { tasks: [{ companyName, companyId, contactName?, contactId?, template, subject?, dueInDays? }] }
+//   template : « Objet : … » puis une ligne vide, puis le texte de l'email.
 //
-// Utilise l'API Engagements v1 (legacy) — compatible avec les tokens pat-eu1-*
-// sans scope tasks supplémentaire.
+// Garde-fous — le lot entier est refusé avant toute création si une tâche échoue :
+//  - gabarit complet : aucun placeholder, token, critère vide ni énumération
+//    trouée (src/services/emailGuard.js) ;
+//  - association systématique : société obligatoire, contact obligatoire dès
+//    qu'un nom de contact est indiqué ;
+//  - propriétaire renseigné (API owners, clé SCOUT), sinon échec explicite.
 
-const HS_ENGAGE = 'https://api.hubapi.com/engagements/v1/engagements'
-const DAY_MS = 24 * 60 * 60 * 1000
+import { scoutKeyConfigured, taskOwnerId, createTask } from './_lib/hubspot-scout.js'
+import { emailProblems } from '../src/services/emailGuard.js'
 
-// Le corps de tâche HubSpot est du HTML : on préserve les retours à la ligne du modèle
-function textToHtml(text) {
-  return String(text ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>')
+function splitTemplate(template) {
+  const [first, ...rest] = String(template ?? '').split('\n\n')
+  return /^Objet\s*:/.test(first)
+    ? { subject: first.replace(/^Objet\s*:\s*/, ''), body: rest.join('\n\n') }
+    : { subject: null, body: String(template ?? '') }
 }
 
-async function createTask(token, { companyName, contactName, template, companyId, contactId, subject: customSubject, dueInDays = 2 }) {
-  const subject = customSubject ?? `📧 Email — ${companyName}${contactName ? ' · ' + contactName : ''}`
-  const dueDate = Date.now() + Number(dueInDays) * DAY_MS
-
-  const body = {
-    engagement: {
-      active:    true,
-      type:      'TASK',
-      timestamp: dueDate,
-    },
-    associations: {
-      companyIds: companyId ? [Number(companyId)] : [],
-      contactIds: contactId ? [Number(contactId)] : [],
-      dealIds:    [],
-      ownerIds:   [],
-      ticketIds:  [],
-    },
-    metadata: {
-      subject,
-      body:     textToHtml(template),
-      status:   'NOT_STARTED',
-      taskType: 'EMAIL',
-      priority: 'MEDIUM',
-    },
-  }
-
-  const r = await fetch(HS_ENGAGE, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const data = await r.json()
-  if (!r.ok) return { ok: false, error: data?.message ?? r.status, status: r.status }
-  return { ok: true, taskId: data?.engagement?.id }
+export function taskProblems(task, index) {
+  const label = `tâche ${index + 1}${task?.companyName ? ` (${task.companyName})` : ''}`
+  const problems = []
+  if (!task?.companyId) problems.push(`${label} : société HubSpot non associée`)
+  if (String(task?.contactName ?? '').trim() && !task?.contactId) problems.push(`${label} : contact HubSpot non associé`)
+  const email = splitTemplate(task?.template)
+  const subject = email.subject ?? task?.subject ?? ''
+  for (const problem of emailProblems({ subject, body: email.body })) problems.push(`${label} : ${problem}`)
+  return problems
 }
 
 export default async function handler(req, res) {
@@ -60,21 +38,44 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Méthode non autorisée' })
 
-  const token = process.env.HUBSPOT_SCOUT_KEY || process.env.HUBSPOT_TOKEN
-  if (!token) return res.status(500).json({ error: 'Clé HubSpot SCOUT non configurée (HUBSPOT_SCOUT_KEY)' })
+  if (!scoutKeyConfigured()) return res.status(500).json({ error: 'Clé HubSpot SCOUT non configurée (HUBSPOT_SCOUT_KEY)' })
 
   const { tasks } = req.body ?? {}
-  if (!tasks?.length) return res.status(400).json({ error: 'tasks[] requis' })
+  if (!Array.isArray(tasks) || !tasks.length) return res.status(400).json({ error: 'tasks[] requis' })
 
+  // 1. Validation de tout le lot : un gabarit incomplet est une erreur
+  const problems = tasks.flatMap(taskProblems)
+  if (problems.length) {
+    return res.status(400).json({
+      error: `Tâches refusées : ${problems.join(' ; ')}`, code: 'INVALID_TASKS', problems, created: 0, errors: tasks.length, total: tasks.length,
+    })
+  }
+
+  // 2. Propriétaire obligatoire
+  let ownerId
   try {
-    const results = await Promise.allSettled(
-      tasks.map((t) => createTask(token, t))
-    )
+    ownerId = await taskOwnerId()
+  } catch (err) {
+    return res.status(503).json({ error: `Tâches non créées : ${err.message}`, code: err.code, created: 0, errors: tasks.length, total: tasks.length })
+  }
+
+  // 3. Création
+  try {
+    const results = await Promise.allSettled(tasks.map((t) => createTask({
+      subject: t.subject ?? `📧 Email — ${t.companyName}${t.contactName ? ' · ' + t.contactName : ''}`,
+      template: t.template,
+      companyId: t.companyId,
+      contactId: t.contactId,
+      ownerId,
+      dueInDays: t.dueInDays,
+    })))
 
     const created = results.filter((r) => r.status === 'fulfilled' && r.value?.ok).length
-    const errors  = results.length - created
+    const failures = results
+      .map((r, i) => (r.status === 'fulfilled' && r.value?.ok ? null : `tâche ${i + 1} : ${r.value?.error ?? r.reason?.message ?? 'erreur'}`))
+      .filter(Boolean)
 
-    return res.status(200).json({ created, errors, total: tasks.length })
+    return res.status(200).json({ created, errors: failures.length, total: tasks.length, ...(failures.length ? { problems: failures } : {}) })
   } catch (err) {
     return res.status(502).json({ error: `HubSpot error: ${err.message}` })
   }

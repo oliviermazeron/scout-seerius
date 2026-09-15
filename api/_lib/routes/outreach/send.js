@@ -19,6 +19,7 @@ import { configStatus, reportConfig, isDryRun, logDryRun } from '../../config.js
 import { googleConfig, gmailAccount, sendGmail } from '../../google.js'
 import { upsertCompany, upsertContact, associateContactToCompany } from '../../hubspot-scout.js'
 import { checkSubscription } from '../../hubspot-comms.js'
+import { emailProblems } from '../../../../src/services/emailGuard.js'
 import { redis, hgetJSON } from '../../redis.js'
 import {
   SENDS_KEY, PIPELINE_KEY, DAILY_CAP, FOLLOW_UP_DAYS, DAY_MS, EMAIL_RE,
@@ -38,8 +39,13 @@ export default async function handler(req, res) {
   if (!EMAIL_RE.test(to) || !target?.id || !target?.name || !email?.subject?.trim() || !email?.body?.trim()) {
     return res.status(400).json({ error: 'Destinataire, cabinet, objet et texte requis' })
   }
-  if (email.body.includes('[Prénom Nom]')) {
-    return res.status(400).json({ error: 'Signature incomplète : renseignez votre nom' })
+  // Un gabarit incomplet est une erreur, pas un email à envoyer
+  const incomplete = [
+    ...emailProblems(email),
+    ...(followUp ? emailProblems(followUp).map((p) => `relance — ${p}`) : []),
+  ]
+  if (incomplete.length) {
+    return res.status(400).json({ error: `Email incomplet : ${incomplete.join(' ; ')}`, code: 'INCOMPLETE_EMAIL', problems: incomplete })
   }
 
   const window = sendingWindow()

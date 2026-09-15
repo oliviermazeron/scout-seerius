@@ -1,35 +1,48 @@
 import { useState, useCallback, useMemo } from 'react'
-import { JURIDIQUE_SEGMENTS, OUTREACH_ID, addTargets } from '../services/outreach.js'
+import { JURIDIQUE_SEGMENTS, OUTREACH_ID, addTargets, readSender } from '../services/outreach.js'
+import { assertCompleteEmail, IncompleteEmailError } from '../services/emailGuard.js'
 import { saveShared } from '../services/store.js'
 import './ContactTable.css'
 
 // Templates d'email par segment (tâche HubSpot — v2 positionnement Seerius)
 const SEGMENT_TEMPLATES = {
-  banque_cantonale: (co) => `Objet : Partenaire sur les successions de PME — Seerius x ${co}\n\nMadame, Monsieur,\n\nVos équipes PME sont souvent les premières informées qu'un dirigeant envisage de transmettre ou céder son entreprise. C'est précisément là que Seerius intervient.\n\nNous sommes une société d'investissement spécialisée dans les PME suisses et européennes en succession familiale. Notre particularité : après chaque acquisition, nos équipes auditent les processus de l'entreprise, identifient les vrais leviers de productivité et les déploient — avec le support d'outils d'intelligence artificielle là où c'est pertinent. L'objectif est une amélioration mesurable de l'EBITDA, pas une promesse de disruption.\n\nCe serait un plaisir d'échanger 20 minutes sur comment nous pouvons collaborer sur ces dossiers.\n\n[Prénom Nom] — Seerius`,
+  banque_cantonale: (co, sign) => `Objet : Partenaire sur les successions de PME — Seerius x ${co}\n\nMadame, Monsieur,\n\nVos équipes PME sont souvent les premières informées qu'un dirigeant envisage de transmettre ou céder son entreprise. C'est précisément là que Seerius intervient.\n\nNous sommes une société d'investissement spécialisée dans les PME suisses et européennes en succession familiale. Notre particularité : après chaque acquisition, nos équipes auditent les processus de l'entreprise, identifient les vrais leviers de productivité et les déploient — avec le support d'outils d'intelligence artificielle là où c'est pertinent. L'objectif est une amélioration mesurable de l'EBITDA, pas une promesse de disruption.\n\nCe serait un plaisir d'échanger 20 minutes sur comment nous pouvons collaborer sur ces dossiers.\n\n${sign}`,
 
-  banque_privee: (co) => `Objet : Dealflow PME suisses — Seerius x ${co}\n\nMadame, Monsieur,\n\nCertains de vos clients entrepreneurs envisagent de céder leur entreprise. Avant qu'ils arrivent chez vous avec leur liquidité, il y a une phase que nous gérons : la préparation et la transaction.\n\nSeerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Ce qui nous distingue du capital-investissement traditionnel : nos équipes s'impliquent directement dans chaque participation après acquisition — audit des processus, identification des gains de productivité, déploiement d'outils IA là où ils créent de la valeur réelle. Pas du capital passif.\n\nUn café pour voir comment nous pouvons nous référer mutuellement ?\n\n[Prénom Nom] — Seerius`,
+  banque_privee: (co, sign) => `Objet : Dealflow PME suisses — Seerius x ${co}\n\nMadame, Monsieur,\n\nCertains de vos clients entrepreneurs envisagent de céder leur entreprise. Avant qu'ils arrivent chez vous avec leur liquidité, il y a une phase que nous gérons : la préparation et la transaction.\n\nSeerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Ce qui nous distingue du capital-investissement traditionnel : nos équipes s'impliquent directement dans chaque participation après acquisition — audit des processus, identification des gains de productivité, déploiement d'outils IA là où ils créent de la valeur réelle. Pas du capital passif.\n\nUn café pour voir comment nous pouvons nous référer mutuellement ?\n\n${sign}`,
 
-  banque_affaires: (co) => `Objet : Dossiers de cession PME — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius investit dans des PME suisses et européennes en succession familiale. Notre approche est opérationnelle : après acquisition, nos équipes travaillent directement avec le management pour auditer les processus, identifier les leviers de productivité et les concrétiser — avec des outils d'intelligence artificielle là où ils améliorent réellement l'EBITDA.\n\nNous cherchons des partenaires avec qui travailler dans la durée sur des mandats complémentaires. Disponible 20 minutes ?\n\n[Prénom Nom] — Seerius`,
+  banque_affaires: (co, sign) => `Objet : Dossiers de cession PME — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius investit dans des PME suisses et européennes en succession familiale. Notre approche est opérationnelle : après acquisition, nos équipes travaillent directement avec le management pour auditer les processus, identifier les leviers de productivité et les concrétiser — avec des outils d'intelligence artificielle là où ils améliorent réellement l'EBITDA.\n\nNous cherchons des partenaires avec qui travailler dans la durée sur des mandats complémentaires. Disponible 20 minutes ?\n\n${sign}`,
 
-  avocat: (co) => `Objet : Dossiers de cession PME — Seerius x ${co}\n\nMaître,\n\nVous structurez les cessions. Nous les finançons et nous accompagnons les entreprises après l'acquisition. C'est une complémentarité naturelle.\n\nSeerius investit dans des PME suisses et européennes en succession familiale. Après chaque acquisition, nos équipes travaillent directement avec le management : audit des processus, refonte des workflows, déploiement d'outils d'intelligence artificielle là où ils améliorent concrètement l'EBITDA. Une approche opérationnelle, pas seulement financière.\n\nNous cherchons des avocats M&A avec qui travailler dans la durée. Disponible 20 minutes ?\n\n[Prénom Nom] — Seerius`,
+  avocat: (co, sign) => `Objet : Dossiers de cession PME — Seerius x ${co}\n\nMaître,\n\nVous structurez les cessions. Nous les finançons et nous accompagnons les entreprises après l'acquisition. C'est une complémentarité naturelle.\n\nSeerius investit dans des PME suisses et européennes en succession familiale. Après chaque acquisition, nos équipes travaillent directement avec le management : audit des processus, refonte des workflows, déploiement d'outils d'intelligence artificielle là où ils améliorent concrètement l'EBITDA. Une approche opérationnelle, pas seulement financière.\n\nNous cherchons des avocats M&A avec qui travailler dans la durée. Disponible 20 minutes ?\n\n${sign}`,
 
-  notaire: (co) => `Objet : Transmissions d'entreprises — Seerius x ${co}\n\nMaître,\n\nVous formalisez les transmissions. Certains de vos clients dirigeants s'interrogent sur leur succession bien avant d'en parler à leur banquier ou à leur avocat. Si c'est le cas, nous pouvons intervenir très en amont.\n\nSeerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Notre approche est opérationnelle : après acquisition, nos équipes auditent les processus de chaque entreprise, identifient les leviers de productivité et les concrétisent — avec le support de l'intelligence artificielle là où elle apporte une vraie valeur.\n\nUn échange de 20 minutes pour se connaître ?\n\n[Prénom Nom] — Seerius`,
+  notaire: (co, sign) => `Objet : Transmissions d'entreprises — Seerius x ${co}\n\nMaître,\n\nVous formalisez les transmissions. Certains de vos clients dirigeants s'interrogent sur leur succession bien avant d'en parler à leur banquier ou à leur avocat. Si c'est le cas, nous pouvons intervenir très en amont.\n\nSeerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Notre approche est opérationnelle : après acquisition, nos équipes auditent les processus de chaque entreprise, identifient les leviers de productivité et les concrétisent — avec le support de l'intelligence artificielle là où elle apporte une vraie valeur.\n\nUn échange de 20 minutes pour se connaître ?\n\n${sign}`,
 
-  fiduciaire: (co) => `Objet : Vos clients cédants — Seerius x ${co}\n\nMadame, Monsieur,\n\nVous êtes souvent le premier confident d'un dirigeant qui pense à transmettre son entreprise. Vous voyez les comptes, vous connaissez la réalité de l'entreprise.\n\nSeerius investit dans des PME suisses et européennes en succession familiale. Ce qui nous distingue : nous ne sommes pas des investisseurs passifs. Après chaque acquisition, nos équipes travaillent avec le management pour auditer les processus, identifier les gains de productivité réels et les déployer — avec des outils IA là où c'est justifié. L'objectif : une amélioration mesurable de l'EBITDA, documentée et publiée.\n\nSi vous avez des clients qui réfléchissent à leur succession, nous serions un partenaire sérieux à leur présenter. 20 minutes pour se présenter ?\n\n[Prénom Nom] — Seerius`,
+  fiduciaire: (co, sign) => `Objet : Vos clients cédants — Seerius x ${co}\n\nMadame, Monsieur,\n\nVous êtes souvent le premier confident d'un dirigeant qui pense à transmettre son entreprise. Vous voyez les comptes, vous connaissez la réalité de l'entreprise.\n\nSeerius investit dans des PME suisses et européennes en succession familiale. Ce qui nous distingue : nous ne sommes pas des investisseurs passifs. Après chaque acquisition, nos équipes travaillent avec le management pour auditer les processus, identifier les gains de productivité réels et les déployer — avec des outils IA là où c'est justifié. L'objectif : une amélioration mesurable de l'EBITDA, documentée et publiée.\n\nSi vous avez des clients qui réfléchissent à leur succession, nous serions un partenaire sérieux à leur présenter. 20 minutes pour se présenter ?\n\n${sign}`,
 
-  conseil_fiscal: (co) => `Objet : Cessions de PME — Seerius x ${co}\n\nMadame, Monsieur,\n\nLa réflexion fiscale précède souvent la décision de céder. Vos clients vous posent ces questions avant d'en parler ailleurs — c'est exactement à ce stade que nous pouvons intervenir ensemble.\n\nSeerius investit dans des PME suisses et européennes en succession familiale. Notre rôle va au-delà du capital : après acquisition, nos équipes auditent les processus des entreprises, identifient les leviers de productivité et déploient des outils d'intelligence artificielle là où ils améliorent concrètement l'EBITDA. Votre expertise fiscale reste centrale dans la structuration de ces opérations.\n\nUn échange de 20 minutes pour voir comment travailler ensemble ?\n\n[Prénom Nom] — Seerius`,
+  conseil_fiscal: (co, sign) => `Objet : Cessions de PME — Seerius x ${co}\n\nMadame, Monsieur,\n\nLa réflexion fiscale précède souvent la décision de céder. Vos clients vous posent ces questions avant d'en parler ailleurs — c'est exactement à ce stade que nous pouvons intervenir ensemble.\n\nSeerius investit dans des PME suisses et européennes en succession familiale. Notre rôle va au-delà du capital : après acquisition, nos équipes auditent les processus des entreprises, identifient les leviers de productivité et déploient des outils d'intelligence artificielle là où ils améliorent concrètement l'EBITDA. Votre expertise fiscale reste centrale dans la structuration de ces opérations.\n\nUn échange de 20 minutes pour voir comment travailler ensemble ?\n\n${sign}`,
 
-  gestionnaire_fortune: (co) => `Objet : Opportunités PME suisses — Seerius x ${co}\n\nMadame, Monsieur,\n\nCertains de vos clients cherchent des placements dans l'économie réelle — des participations dans des PME suisses solides, hors des marchés cotés.\n\nSeerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Nous ne sommes pas des investisseurs passifs : après chaque acquisition, nos équipes s'impliquent opérationnellement pour auditer les processus, identifier les leviers de productivité et les déployer avec des outils IA là où c'est pertinent. L'objectif est une amélioration mesurable de l'EBITDA.\n\nSeriez-vous disponible pour un échange ?\n\n[Prénom Nom] — Seerius`,
+  gestionnaire_fortune: (co, sign) => `Objet : Opportunités PME suisses — Seerius x ${co}\n\nMadame, Monsieur,\n\nCertains de vos clients cherchent des placements dans l'économie réelle — des participations dans des PME suisses solides, hors des marchés cotés.\n\nSeerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Nous ne sommes pas des investisseurs passifs : après chaque acquisition, nos équipes s'impliquent opérationnellement pour auditer les processus, identifier les leviers de productivité et les déployer avec des outils IA là où c'est pertinent. L'objectif est une amélioration mesurable de l'EBITDA.\n\nSeriez-vous disponible pour un échange ?\n\n${sign}`,
 
-  asset_manager: (co) => `Objet : Opportunités PME suisses et européennes — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Notre différence : après chaque acquisition, nos équipes travaillent directement avec le management — audit des processus, refonte des workflows, déploiement d'outils IA là où ils créent de la valeur réelle. Pas du capital passif.\n\nNous pourrions échanger sur des opportunités de co-investissement correspondant à vos stratégies. Un échange de 20 minutes ?\n\n[Prénom Nom] — Seerius`,
+  asset_manager: (co, sign) => `Objet : Opportunités PME suisses et européennes — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Notre différence : après chaque acquisition, nos équipes travaillent directement avec le management — audit des processus, refonte des workflows, déploiement d'outils IA là où ils créent de la valeur réelle. Pas du capital passif.\n\nNous pourrions échanger sur des opportunités de co-investissement correspondant à vos stratégies. Un échange de 20 minutes ?\n\n${sign}`,
 
-  family_office: (co) => `Objet : Investissement direct PME — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius investit dans des PME suisses et européennes en succession familiale — des entreprises solides, hors des marchés cotés, avec une vraie création de valeur opérationnelle.\n\nNotre particularité : après chaque acquisition, nos équipes auditent les processus, identifient les vrais leviers de productivité et les déploient — avec des outils d'intelligence artificielle là où c'est pertinent. L'objectif est une amélioration mesurable de l'EBITDA, documentée et publiée.\n\nSeriez-vous ouverts à un échange confidentiel ?\n\n[Prénom Nom] — Seerius`,
+  family_office: (co, sign) => `Objet : Investissement direct PME — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius investit dans des PME suisses et européennes en succession familiale — des entreprises solides, hors des marchés cotés, avec une vraie création de valeur opérationnelle.\n\nNotre particularité : après chaque acquisition, nos équipes auditent les processus, identifient les vrais leviers de productivité et les déploient — avec des outils d'intelligence artificielle là où c'est pertinent. L'objectif est une amélioration mesurable de l'EBITDA, documentée et publiée.\n\nSeriez-vous ouverts à un échange confidentiel ?\n\n${sign}`,
 
-  multi_family_office: (co) => `Objet : Co-investissement PME suisses — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius investit dans des PME suisses et européennes en succession familiale. Pour les familles que vous gérez, nous pouvons représenter une source d'accès à des opportunités dans l'économie réelle — avec une approche opérationnelle qui va au-delà du capital.\n\nAprès chaque acquisition, nos équipes s'impliquent directement : audit des processus, identification des gains de productivité, déploiement d'outils IA là où ils améliorent l'EBITDA. Une création de valeur mesurable et documentée.\n\nSeriez-vous disponible pour un échange ?\n\n[Prénom Nom] — Seerius`,
+  multi_family_office: (co, sign) => `Objet : Co-investissement PME suisses — Seerius x ${co}\n\nMadame, Monsieur,\n\nSeerius investit dans des PME suisses et européennes en succession familiale. Pour les familles que vous gérez, nous pouvons représenter une source d'accès à des opportunités dans l'économie réelle — avec une approche opérationnelle qui va au-delà du capital.\n\nAprès chaque acquisition, nos équipes s'impliquent directement : audit des processus, identification des gains de productivité, déploiement d'outils IA là où ils améliorent l'EBITDA. Une création de valeur mesurable et documentée.\n\nSeriez-vous disponible pour un échange ?\n\n${sign}`,
 }
+// Signature = « Votre signature » de la page Campagne email : obligatoire, jamais
+// de placeholder. Un gabarit incomplet lève IncompleteEmailError.
 function getTemplate(segmentId, companyName) {
   const fn = SEGMENT_TEMPLATES[segmentId]
-  return fn ? fn(companyName) : `Email à envoyer à ${companyName} — Seerius`
+  if (!fn) throw new IncompleteEmailError([`aucun modèle d'email pour ce segment (${segmentId})`])
+  if (!String(companyName ?? '').trim()) throw new IncompleteEmailError(['société manquante'])
+  const sender = readSender()
+  if (!String(sender.name ?? '').trim()) {
+    throw new IncompleteEmailError(['nom du signataire manquant : renseignez « Votre signature » dans la page ✉️ Campagne email'])
+  }
+  const sign = [sender.name.trim(), sender.title?.trim(), 'Seerius', sender.phone?.trim()].filter(Boolean).join('\n')
+  const template = fn(companyName, sign)
+  const [subjectLine, ...rest] = template.split('\n\n')
+  assertCompleteEmail({ subject: subjectLine.replace(/^Objet\s*:\s*/, ''), body: rest.join('\n\n') })
+  return template
 }
 
 const STATUTS = ['—', 'Contacté', 'RDV', 'Partenaire']
@@ -503,23 +516,33 @@ export default function ContactTable({ companies, segment, onNavigate }) {
     setCreatingTasks(true)
     setTaskResult(null)
 
-    const tasks = targets.map((c) => ({
-      companyName:  c.name,
-      contactName:  '',
-      contactRole:  '',
-      template:     getTemplate(segment, c.name),
-    }))
-
     try {
+      // 1. Gabarits complets avant tout appel HubSpot : un gabarit incomplet est une erreur
+      const drafts = targets.map((c) => ({ c, template: getTemplate(segment, c.name) }))
+
+      // 2. Chaque tâche est associée à la société HubSpot de la cible
+      const tasks = []
+      for (const { c, template } of drafts) {
+        const r = await fetch('/api/hubspot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: c.name, domain: c._domain ?? undefined, canton: c.canton ?? '', uid: c.uid ?? '', segment }),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok || !d.company?.id) throw new Error(`société HubSpot non créée pour ${c.name}`)
+        tasks.push({ companyName: c.name, companyId: d.company.id, template })
+      }
+
+      // 3. Tâches (propriétaire et validation vérifiés côté serveur)
       const r = await fetch('/api/hubspot-tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tasks }),
       })
-      const data = await r.json()
-      setTaskResult(data)
-    } catch {
-      setTaskResult({ created: 0, errors: tasks.length })
+      const data = await r.json().catch(() => ({}))
+      setTaskResult(r.ok ? data : { created: 0, errors: tasks.length, message: data.error ?? `Erreur ${r.status}` })
+    } catch (err) {
+      setTaskResult({ created: 0, errors: targets.length, message: err.message })
     }
     setCreatingTasks(false)
   }
@@ -763,6 +786,7 @@ export default function ContactTable({ companies, segment, onNavigate }) {
             <span className="task-result">
               ✓ {taskResult.created} tâche{taskResult.created !== 1 ? 's' : ''} créée{taskResult.created !== 1 ? 's' : ''}
               {taskResult.errors > 0 ? ` · ${taskResult.errors} erreur${taskResult.errors > 1 ? 's' : ''}` : ''}
+              {taskResult.message && <span className="task-error" title={taskResult.message}> — ⚠️ {taskResult.message}</span>}
             </span>
           )}
         </div>

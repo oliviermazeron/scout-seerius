@@ -39,11 +39,21 @@ La tâche Vercel Cron `/api/outreach/followups` (lun–ven, 07:00 UTC) détecte 
 réponses, les rejets et les « stop », envoie les relances dues et reprend les
 journalisations et désinscriptions en échec.
 
+### Emails et tâches incomplets
+
+Un gabarit incomplet est une erreur, pas un email à envoyer
+(`src/services/emailGuard.js`, appliqué dans l'interface, `/api/hubspot-tasks` et
+`/api/outreach/send`) : placeholder `[…]`, token `{{…}}` / `${…}`, critère sans
+valeur, énumération trouée, `undefined`/`null`, objet ou texte vide. La
+génération échoue aussi si le nom du signataire, la société ou un critère
+d'acquisition (objectif Deal flow) manque. Les tâches HubSpot exigent en outre une
+société associée, le contact dès qu'un nom est indiqué, et un propriétaire.
+
 ## Deux identifiants HubSpot, strictement séparés
 
 | Variable | Identité HubSpot | Portées | Usage autorisé | Client |
 |---|---|---|---|---|
-| `HUBSPOT_SCOUT_KEY` (ou `HUBSPOT_TOKEN`, nom historique) | Clé de service « SCOUT » | `crm.objects.contacts.read/write`, `crm.objects.companies.read/write`, `sales-email-read` | Contacts et sociétés (sourcing) ; création de l'objet email et association au contact | `api/_lib/hubspot-scout.js` |
+| `HUBSPOT_SCOUT_KEY` (ou `HUBSPOT_TOKEN`, nom historique) | Clé de service « SCOUT » | `crm.objects.contacts.read/write`, `crm.objects.companies.read/write`, `sales-email-read`, `crm.objects.owners.read` | Contacts et sociétés (sourcing) ; création de l'objet email et association au contact ; tâches assignées (propriétaire lu via l'API owners) | `api/_lib/hubspot-scout.js` |
 | `HUBSPOT_COMMS_TOKEN` | Application privée héritée « SCOUT COMMS » | `crm.objects.contacts.read`, `sales-email-read`, `communication_preferences.read_write` | Lecture du statut d'abonnement (type « Prospection Seerius — intermédiaires » + désinscription totale) ; enregistrement des désinscriptions | `api/_lib/hubspot-comms.js` |
 
 Règles :
@@ -91,6 +101,7 @@ Development : aucun token HubSpot ni Google, `HUBSPOT_DRY_RUN=true`.
 | `OUTREACH_SECRET` | Signature des liens de désinscription |
 | `CRON_SECRET` | Authentifie la tâche Vercel Cron |
 | `OUTREACH_DAILY_CAP` | Plafond d'envois par jour (défaut 20) |
+| `HUBSPOT_TASK_OWNER_EMAIL` | Propriétaire des tâches HubSpot (défaut olivier@seerius.ch) ; introuvable → aucune tâche créée |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Upstash Redis (injectées par l'intégration) |
 | `BRAVE_API_KEY`, `HUNTER_API_KEY`, `NINJAPEAR_API_KEY` | Enrichissement (sourcing) |
 
