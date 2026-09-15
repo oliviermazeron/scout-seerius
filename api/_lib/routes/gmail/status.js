@@ -5,6 +5,7 @@
 
 import { setCors, requireAccess, sendingWindow } from '../../access.js'
 import { configStatus, reportConfig } from '../../config.js'
+import { prospectionSubscriptionId, SUBSCRIPTION_NAME } from '../../hubspot-comms.js'
 import { googleConfig, gmailAccount, disconnectGmail } from '../../google.js'
 import { quotaUsed, DAILY_CAP } from '../../outreach.js'
 
@@ -25,11 +26,25 @@ export default async function handler(req, res) {
     const window = sendingWindow()
     const account = googleConfig() ? await gmailAccount() : null
     const cfg = configStatus()
+
+    // Diagnostic à la demande (?check=hubspot) : lecture seule des types
+    // d'abonnement avec le token COMMS, pour confirmer que le type visé existe
+    let subscriptionType
+    if (req.query?.check === 'hubspot' && cfg.commsEnabled) {
+      try {
+        await prospectionSubscriptionId()
+        subscriptionType = { name: SUBSCRIPTION_NAME, found: true }
+      } catch (err) {
+        subscriptionType = { name: SUBSCRIPTION_NAME, found: false, error: err.message }
+      }
+    }
+
     res.setHeader('Cache-Control', 'no-store')
     return res.status(200).json({
       dryRun: cfg.dryRun,
       commsEnabled: cfg.commsEnabled,
       scoutKey: cfg.scoutKey,
+      ...(subscriptionType ? { subscriptionType } : {}),
       configured: !!googleConfig(),
       connected: !!account,
       email: account?.email ?? null,
