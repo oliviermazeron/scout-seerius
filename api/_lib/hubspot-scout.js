@@ -1,7 +1,7 @@
 // ─── Client HubSpot « SCOUT » — sourcing et journalisation des emails ────────
 // Identité : clé de service « SCOUT » (HUBSPOT_SCOUT_KEY, ou HUBSPOT_TOKEN).
 // Portées : crm.objects.contacts.read/write, crm.objects.companies.read/write,
-//           sales-email-read.
+//           crm.lists.read/write, sales-email-read.
 // Usage autorisé : créer / mettre à jour contacts et sociétés, créer l'objet
 // email et l'associer au contact. Jamais de préférences de communication ici
 // (voir hubspot-comms.js).
@@ -15,6 +15,31 @@ const SEGMENT_MAP = {
   avocat:           "Cabinet juridique / Notarial",
 }
 
+// Valeurs internes HubSpot pour scout_segment (portail 147633255)
+const SCOUT_SEGMENT_MAP = {
+  avocat:              'cabinet_avocats',
+  notaire:             'cabinet_avocats',
+  conseil_fiscal:      'cabinet_avocats',
+  fiduciaire:          'fiduciaire',
+  banque_privee:       'banquier_prive',
+  banque_cantonale:    'banque_cantonale',
+  banque_affaires:     'banque_affaires',
+  gestionnaire_fortune: 'banquier_prive',
+  asset_manager:       'banquier_prive',
+  family_office:       'banquier_prive',
+  multi_family_office: 'banquier_prive',
+}
+
+// Domaines mutualisés : pas de société créée pour ces adresses
+const SHARED_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com', 'bluewin.ch', 'hotmail.com', 'hotmail.fr',
+  'live.com', 'live.fr', 'outlook.com', 'protonmail.com', 'proton.me',
+  'yahoo.fr', 'yahoo.com', 'icloud.com', 'me.com',
+])
+
+// Minuit UTC au format YYYY-MM-DD (HubSpot stocke les dates date à minuit UTC)
+const todayUTC = () => new Date().toISOString().slice(0, 10)
+
 export const scoutKeyConfigured = () => !!(process.env.HUBSPOT_SCOUT_KEY || process.env.HUBSPOT_TOKEN)
 
 function scoutKey() {
@@ -26,50 +51,85 @@ function scoutKey() {
 const request = (path, options) => hubspotRequest(scoutKey(), path, options)
 
 // ─── Sociétés & contacts ──────────────────────────────────────────────────────
+
+// Recherche par domaine avant création pour éviter les doublons.
+// Domaines mutualisés (gmail.com, bluewin.ch…) : pas de société créée.
+// En cas de résultats multiples, la fiche la plus ancienne (createdate asc) est retenue.
 export async function upsertCompany({ name, domain, canton, uid, segment }) {
   const properties = {
     name,
-    ...(domain  ? { domain }                               : {}),
+    ...(domain  ? { domain }                                : {}),
     ...(canton  ? { state: canton, country: 'Switzerland' } : { country: 'Switzerland' }),
     ...(segment ? { segment: SEGMENT_MAP[segment] ?? segment } : {}),
-    ...(uid     ? { description: `ZEFIX UID: ${uid}` }     : {}),
+    ...(uid     ? { description: `ZEFIX UID: ${uid}` }      : {}),
   }
 
-  const r = await request('/crm/v3/objects/companies', { method: 'POST', body: { properties } })
+  const normalDomain = domain?.toLowerCase().trim()
 
-  // 409 = domaine déjà existant → on met à jour
-  if (r.status === 409) {
-    const existingId = r.data?.message?.match(/ID: (\d+)/)?.[1]
-    if (existingId) {
-      const p = await request(`/crm/v3/objects/companies/${existingId}`, { method: 'PATCH', body: { properties } })
-      return { action: 'updated', id: existingId, data: p.data }
+  // Domaine mutualisé : ne pas chercher ni créer de société
+  if (normalDomain && SHARED_DOMAINS.has(normalDomain)) {
+    return { action: 'skipped', id: null }
+  }
+
+  // Rechercher d'abord par domaine (évite la création de doublons)
+  if (normalDomain) {
+    const search = await request('/crm/v3/objects/companies/search', {
+      method: 'POST',
+      body: {
+        filterGroups: [{ filters: [{ propertyName: 'domain', operator: 'EQ', value: normalDomain }] }],
+        properties: ['name', 'domain'],
+        sorts: [{ propertyName: 'createdate', direction: 'ASCENDING' }],
+        limit: 1,
+      },
+    })
+    if (search.ok && (search.data?.total ?? 0) > 0) {
+      const existingId = search.data.results[0].id
+      await request(`/crm/v3/objects/companies/${existingId}`, { method: 'PATCH', body: { properties } })
+      return { action: 'updated', id: existingId }
     }
   }
 
-  return { action: r.ok ? 'created' : 'error', id: r.data.id ?? null, data: r.data }
+  // Aucune fiche trouvée : créer
+  const r = await request('/crm/v3/objects/companies', { method: 'POST', body: { properties } })
+  // 409 = race condition (deux requêtes parallèles) → récupérer l'ID dans le message
+  if (r.status === 409) {
+    const existingId = r.data?.message?.match(/ID: (\d+)/)?.[1]
+    if (existingId) {
+      await request(`/crm/v3/objects/companies/${existingId}`, { method: 'PATCH', body: { properties } })
+      return { action: 'updated', id: existingId }
+    }
+  }
+  return { action: r.ok ? 'created' : 'error', id: r.data?.id ?? null, data: r.data }
 }
 
-export async function upsertContact({ email, firstname, lastname, jobtitle, company }) {
+// Upsert par email (batch/upsert idProperty=email) — jamais de POST aveugle.
+// Les propriétés scout_* sont incluses directement si campaignId est fourni,
+// évitant un PATCH séparé. scout_campagnes_historique reste en append séparé.
+export async function upsertContact({ email, firstname, lastname, jobtitle, company,
+  campaignId, segment, statut, etapeSequence }) {
+  const normalEmail = email.toLowerCase().trim()
+  const hsSegment = campaignId && segment ? SCOUT_SEGMENT_MAP[segment] : undefined
   const properties = {
-    email,
+    email: normalEmail,
     ...(firstname ? { firstname } : {}),
     ...(lastname  ? { lastname  } : {}),
     ...(jobtitle  ? { jobtitle  } : {}),
     ...(company   ? { company   } : {}),
+    ...(campaignId ? {
+      scout_campagne:           campaignId,
+      scout_statut:             statut ?? 'envoye',
+      scout_date_dernier_envoi: todayUTC(),
+      scout_etape_sequence:     String(etapeSequence ?? 1),
+      ...(hsSegment ? { scout_segment: hsSegment } : {}),
+    } : {}),
   }
-
-  const r = await request('/crm/v3/objects/contacts', { method: 'POST', body: { properties } })
-
-  // 409 = email déjà existant → on met à jour
-  if (r.status === 409) {
-    const existingId = r.data?.message?.match(/ID: (\d+)/)?.[1]
-    if (existingId) {
-      const p = await request(`/crm/v3/objects/contacts/${existingId}`, { method: 'PATCH', body: { properties } })
-      return { action: 'updated', id: existingId, data: p.data }
-    }
-  }
-
-  return { action: r.ok ? 'created' : 'error', id: r.data.id ?? null, data: r.data }
+  const r = await request('/crm/v3/objects/contacts/batch/upsert', {
+    method: 'POST',
+    body: { inputs: [{ idProperty: 'email', id: normalEmail, properties }] },
+  })
+  if (!r.ok) throw new Error(`upsertContact: HTTP ${r.status} — ${r.data?.message ?? 'erreur'}`)
+  const result = r.data?.results?.[0]
+  return { action: result ? 'upserted' : 'error', id: result?.id ?? null, data: result }
 }
 
 export async function associateContactToCompany(contactId, companyId) {

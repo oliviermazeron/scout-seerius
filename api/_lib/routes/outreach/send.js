@@ -25,7 +25,7 @@ import { configStatus, reportConfig, isDryRun, logDryRun } from '../../config.js
 import { googleConfig, gmailAccount, sendGmail } from '../../google.js'
 import { upsertCompany, upsertContact, associateContactToCompany, moveDealToStage } from '../../hubspot-scout.js'
 import { checkSubscription, isAudience, AUDIENCES, DEFAULT_AUDIENCE } from '../../hubspot-comms.js'
-import { writeCampaignProps, appendCampaignHistory } from '../../hubspot-campaign.js'
+import { appendCampaignHistory } from '../../hubspot-campaign.js'
 import { emailProblems } from '../../../../src/services/emailGuard.js'
 import { redis, hgetJSON } from '../../redis.js'
 import {
@@ -141,12 +141,23 @@ export default async function handler(req, res) {
     if (!account) account = await gmailAccount()
     if (!account) return res.status(409).json({ error: 'Gmail non connecté', code: 'GMAIL_DISCONNECTED' })
 
-    // 1. HubSpot (clé SCOUT) : société + contact
+    // 1. HubSpot (clé SCOUT) : société (search-first) + contact upsert avec props scout_*
     const company = await upsertCompany({
       name: target.name, domain: target.domain, canton: target.canton, uid: target.uid, segment: target.segment,
     })
     const hsContact = await upsertContact({
-      email: to, firstname: contact.firstName ?? '', lastname: contact.lastName ?? '', jobtitle: contact.role ?? '', company: target.name,
+      email: to,
+      firstname: contact.firstName ?? '',
+      lastname:  contact.lastName ?? '',
+      jobtitle:  contact.role ?? '',
+      company:   target.name,
+      // Propriétés scout_* incluses dans l'upsert si campagne active (un seul appel)
+      ...(effectiveCampaignId && !isTestSend ? {
+        campaignId: effectiveCampaignId,
+        segment:    target.segment,
+        statut:     'envoye',
+        etapeSequence: 1,
+      } : {}),
     })
     if (!hsContact.id) return res.status(502).json({ error: `Contact HubSpot non créé : ${hsContact.data?.message ?? 'erreur'}` })
     if (company.id) await associateContactToCompany(hsContact.id, company.id)
@@ -225,10 +236,8 @@ export default async function handler(req, res) {
       console.warn(`[SCOUT] Email envoyé à ${to} ; journalisation HubSpot à reprendre : ${err.message}`)
     }
 
-    // Propriétés de campagne SCOUT sur le contact HubSpot (best-effort, pas pour les tests)
+    // Historique de campagne (append read-then-write, toujours séparé de l'upsert)
     if (effectiveCampaignId && !isTestSend) {
-      writeCampaignProps(hsContact.id, { campaignId: effectiveCampaignId, segment: target.segment, statut: 'envoye', etapeSequence: 1 })
-        .catch((err) => console.warn(`[SCOUT] writeCampaignProps ${to} : ${err.message}`))
       appendCampaignHistory(hsContact.id, effectiveCampaignId)
         .catch((err) => console.warn(`[SCOUT] appendCampaignHistory ${to} : ${err.message}`))
     }
