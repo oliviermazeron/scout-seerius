@@ -12,6 +12,7 @@ import { reportConfig, isDryRun, logDryRun } from '../../config.js'
 import { googleConfig, gmailAccount, sendGmail, threadReplies } from '../../google.js'
 import { commsEnabled, checkSubscription, DEFAULT_AUDIENCE } from '../../hubspot-comms.js'
 import { moveDealToStage } from '../../hubspot-scout.js'
+import { writeCampaignProps } from '../../hubspot-campaign.js'
 import { hgetJSON, hgetallJSON } from '../../redis.js'
 import {
   SENDS_KEY, DAY_MS, takeQuota, releaseQuota, withUnsubscribe, buildHtmlBody, saveSend, optOut, pendingOptOut,
@@ -137,6 +138,12 @@ export default async function handler(req, res) {
       })
       report.followedUp++
       await logToHubSpot(record.email, sent.id).catch((err) => report.errors.push(`${record.email} : journalisation relance (${err.message})`))
+      // Mettre à jour les props de campagne : statut relance, étape incrémentée
+      if (record.contactId && record.campaignId) {
+        const etape = Number(record.followUpStep ?? 1) + 1
+        writeCampaignProps(record.contactId, { campaignId: record.campaignId, segment: record.segment, statut: 'relance', etapeSequence: etape })
+          .catch((err) => console.warn(`[SCOUT] writeCampaignProps relance ${record.email} : ${err.message}`))
+      }
     } catch (err) {
       report.errors.push(`${record.email} : ${err.message}`)
     }

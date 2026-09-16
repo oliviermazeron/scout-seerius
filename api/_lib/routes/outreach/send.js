@@ -21,6 +21,7 @@ import { configStatus, reportConfig, isDryRun, logDryRun } from '../../config.js
 import { googleConfig, gmailAccount, sendGmail } from '../../google.js'
 import { upsertCompany, upsertContact, associateContactToCompany, moveDealToStage } from '../../hubspot-scout.js'
 import { checkSubscription, isAudience, AUDIENCES, DEFAULT_AUDIENCE } from '../../hubspot-comms.js'
+import { writeCampaignProps, appendCampaignHistory } from '../../hubspot-campaign.js'
 import { emailProblems } from '../../../../src/services/emailGuard.js'
 import { redis, hgetJSON } from '../../redis.js'
 import {
@@ -36,7 +37,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Méthode non autorisée' })
   if (!requireAccess(req, res)) return
 
-  const { target, contact, email, followUp, senderName, dealId } = req.body ?? {}
+  const { target, contact, email, followUp, senderName, dealId, campaignId } = req.body ?? {}
   const audience = req.body?.audience ?? DEFAULT_AUDIENCE
   if (!isAudience(audience)) return res.status(400).json({ error: `Audience inconnue : ${audience}` })
   const to = normEmail(contact?.email)
@@ -161,6 +162,8 @@ export default async function handler(req, res) {
       dealId: dealId ? String(dealId) : null,
       contactId: hsContact.id,
       companyId: company.id ?? null,
+      campaignId: campaignId?.trim() ?? null,
+      segment: target.segment ?? null,
       hubspotLogs: {
         [sent.id]: { kind: 'initial', subject: email.subject, body: email.body, timestamp: now, origin, state: 'queued' },
       },
@@ -177,6 +180,15 @@ export default async function handler(req, res) {
       if (log?.state !== 'logged') console.warn(`[SCOUT] Email envoyé à ${to} mais non journalisé dans HubSpot : ${log?.error}`)
     } catch (err) {
       console.warn(`[SCOUT] Email envoyé à ${to} ; journalisation HubSpot à reprendre : ${err.message}`)
+    }
+
+    // Propriétés de campagne SCOUT sur le contact HubSpot (best-effort)
+    if (campaignId?.trim()) {
+      const cid = campaignId.trim()
+      writeCampaignProps(hsContact.id, { campaignId: cid, segment: target.segment, statut: 'envoye', etapeSequence: 1 })
+        .catch((err) => console.warn(`[SCOUT] writeCampaignProps ${to} : ${err.message}`))
+      appendCampaignHistory(hsContact.id, cid)
+        .catch((err) => console.warn(`[SCOUT] appendCampaignHistory ${to} : ${err.message}`))
     }
 
     // Affaire « Deal sourcing » → « Contactée » (un échec n'annule pas l'envoi)

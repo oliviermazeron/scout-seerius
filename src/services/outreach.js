@@ -39,6 +39,7 @@ export const DEAL_CRITERIA_FIELDS = [
 
 const DEFAULT_SETTINGS = {
   objective: 'dealflow',
+  campaignId: '',
   criteria: {
     ca:           'de 5 à 100 MCHF',
     ebitda:       'de 1 à 15 MCHF, rentable',
@@ -89,8 +90,18 @@ export function readSettings() {
   const s = readJSON(SETTINGS_KEY, {})
   return {
     objective: OBJECTIVES[s.objective] ? s.objective : DEFAULT_SETTINGS.objective,
+    campaignId: s.campaignId ?? DEFAULT_SETTINGS.campaignId,
     criteria: { ...DEFAULT_SETTINGS.criteria, ...(s.criteria ?? {}) },
   }
+}
+
+// Convention : SCOUT-<AAAA>-<MM>-<SEGMENT>-V<n>
+export function generateCampaignId(segment = 'INTERMEDIAIRES', version = 1) {
+  const now = new Date()
+  const yyyy = now.getFullYear()
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const seg = String(segment).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Z0-9]/g, '')
+  return `SCOUT-${yyyy}-${mm}-${seg}-V${version}`
 }
 export const writeSettings = (settings) => saveShared(SETTINGS_KEY, settings)
 

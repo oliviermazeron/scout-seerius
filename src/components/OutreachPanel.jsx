@@ -3,6 +3,7 @@ import {
   JURIDIQUE_SEGMENTS, OBJECTIVES, DEAL_CRITERIA_FIELDS, SHOW_ACQUISITION_CRITERIA,
   readTargets, writeTargets, readSender, writeSender,
   readSettings, writeSettings, readPipeline, setPipelineStatus, buildEmail, buildFollowUp,
+  generateCampaignId,
 } from '../services/outreach.js'
 import { secureFetch, getAccessCode, setAccessCode } from '../services/access.js'
 import { emailProblems } from '../services/emailGuard.js'
@@ -11,6 +12,15 @@ import './OutreachPanel.css'
 
 const EMAIL_RE  = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const SENDS_KEY = 'scout_outreach_sends' // registre des envois (écrit par le serveur)
+
+const EXCL_LABELS = {
+  cooldown:         'Cooldown',
+  statut_bloquant:  'Statut bloquant',
+  campagne_active:  'Campagne active',
+  desinscrit:       'Désabonné',
+  doublure_societe: 'Doublon société',
+  email_absent:     'Email absent',
+}
 
 function fullName(c) {
   return [c?.firstName, c?.lastName].filter(Boolean).join(' ')
@@ -360,8 +370,12 @@ export default function OutreachPanel({ onNavigate }) {
   const [bulk, setBulk]                 = useState(null) // { kind, done, total, ok, running, stopped }
   const [gmail, setGmail]               = useState({ state: 'loading' })
   const [gmailNotice]                   = useState(readGmailReturn)
-  const [checking, setChecking]         = useState(false)
-  const [checkResult, setCheckResult]   = useState(null)
+  const [checking, setChecking]           = useState(false)
+  const [checkResult, setCheckResult]     = useState(null)
+  const [audience, setAudience]           = useState(null)   // { included, excluded, stats } | null
+  const [audienceLoading, setAudienceLoading] = useState(false)
+  const [listState, setListState]         = useState(null)   // { ok, listId?, name, error? } | null
+  const [listLoading, setListLoading]     = useState(false)
 
   const all = Object.values(targets)
   const list = useMemo(() => Object.values(targets)
@@ -443,6 +457,41 @@ export default function OutreachPanel({ onNavigate }) {
     loadGmail()
   }
 
+  // ── Audience HubSpot ────────────────────────────────────────────────────────
+  async function checkAudience() {
+    const campaignId = settings.campaignId?.trim()
+    if (!campaignId) return
+    setAudienceLoading(true)
+    setAudience(null)
+    const contacts = Object.values(targets)
+      .filter((t) => t.contact?.email)
+      .map((t) => ({
+        email: t.contact.email,
+        segment: t.segment,
+        firstName: t.contact.firstName ?? '',
+        lastName: t.contact.lastName ?? '',
+        companyKey: t.id,
+        companyName: t.name,
+        role: t.contact.role ?? '',
+      }))
+    const { ok, data } = await secureFetch('/api/campaign/audience', {
+      method: 'POST',
+      body: { contacts, campaignId, cooldownDays: 90 },
+    })
+    setAudience(ok ? data : { error: data?.error ?? 'Vérification impossible', included: [], excluded: [] })
+    setAudienceLoading(false)
+  }
+
+  async function createList() {
+    const campaignId = settings.campaignId?.trim()
+    if (!campaignId) return
+    setListLoading(true)
+    setListState(null)
+    const { ok, data } = await secureFetch('/api/campaign/list', { method: 'POST', body: { campaignId } })
+    setListState(ok ? data : { ok: false, error: data?.error ?? 'Création impossible', name: `SCOUT — ${campaignId}` })
+    setListLoading(false)
+  }
+
   // ── Mutations ───────────────────────────────────────────────────────────────
   function updateTarget(id, patch) {
     setTargets((prev) => {
@@ -479,6 +528,7 @@ export default function OutreachPanel({ onNavigate }) {
   }
   const setObjective = (objective) => updateSettings((s) => ({ ...s, objective }))
   const setCriterion = (field, value) => updateSettings((s) => ({ ...s, criteria: { ...s.criteria, [field]: value } }))
+  const setCampaignId = (campaignId) => { updateSettings((s) => ({ ...s, campaignId })); setAudience(null) }
 
   const changeStatus = (id, statut) => setPipeline(setPipelineStatus(id, statut))
   const chooseContact = (t, contact) => updateTarget(t.id, { contact, draft: null })
@@ -573,6 +623,7 @@ export default function OutreachPanel({ onNavigate }) {
         followUp: followUpMail,
         senderName: sender.name,
         objective: settings.objective,
+        campaignId: settings.campaignId?.trim() || undefined,
       },
     })
 
@@ -717,6 +768,95 @@ export default function OutreachPanel({ onNavigate }) {
         onCheck={checkReplies}
         onRetry={() => { setGmail({ state: 'loading' }); loadGmail() }}
       />
+
+      {/* ── Identifiant de campagne ── */}
+      <div className="op-sender op-campaign-block">
+        <div className="op-block-label">Identifiant de campagne</div>
+        <div className="op-campaign-row">
+          <input
+            className="op-campaign-input"
+            placeholder="SCOUT-2026-09-INTERMEDIAIRES-V1"
+            value={settings.campaignId ?? ''}
+            onChange={(e) => setCampaignId(e.target.value)}
+          />
+          <button
+            type="button"
+            className="op-btn-light"
+            onClick={() => setCampaignId(generateCampaignId('INTERMEDIAIRES'))}
+            title="Générer un identifiant selon la convention SCOUT-AAAA-MM-SEGMENT-V1"
+          >
+            Générer
+          </button>
+        </div>
+        <p className="op-muted" style={{ marginTop: 6 }}>
+          Identifiant écrit dans HubSpot sur chaque contact touché. Convention : <code>SCOUT-AAAA-MM-SEGMENT-V1</code>.{' '}
+          Sans identifiant, les emails partent sans traçabilité campagne dans HubSpot.
+        </p>
+        {settings.campaignId?.trim() && (
+          <div className="op-campaign-actions">
+            <button
+              type="button"
+              className="op-btn-light"
+              disabled={audienceLoading || Object.values(targets).filter((t) => t.contact?.email).length === 0}
+              onClick={checkAudience}
+            >
+              {audienceLoading ? 'Vérification…' : '🔍 Vérifier l\'audience HubSpot'}
+            </button>
+            <button
+              type="button"
+              className="op-btn-light"
+              disabled={listLoading}
+              onClick={createList}
+            >
+              {listLoading ? 'Création…' : '📋 Créer le segment HubSpot'}
+            </button>
+          </div>
+        )}
+        {listState && (
+          <div className={listState.ok ? 'op-ok' : 'op-warn'} style={{ marginTop: 8 }}>
+            {listState.ok
+              ? `✓ Segment « ${listState.name} » ${listState.existing ? 'déjà existant' : 'créé'} dans HubSpot (ID ${listState.listId})`
+              : `⚠️ Segment non créé : ${listState.error}`}
+          </div>
+        )}
+        {audience && (
+          <div className="op-audience">
+            {audience.error
+              ? <div className="op-warn">⚠️ Vérification impossible : {audience.error}</div>
+              : (
+                <>
+                  <div className="op-audience-summary">
+                    <span className="op-audience-inc">✓ {audience.stats?.included ?? audience.included?.length} contacts inclus</span>
+                    {(audience.stats?.excluded ?? audience.excluded?.length) > 0 && (
+                      <span className="op-audience-exc">⊘ {audience.stats?.excluded ?? audience.excluded?.length} exclus</span>
+                    )}
+                    {audience.stats?.byReason && Object.entries(audience.stats.byReason).map(([reason, n]) => (
+                      <span key={reason} className="op-audience-reason">{EXCL_LABELS[reason] ?? reason} ({n})</span>
+                    ))}
+                  </div>
+                  {audience.excluded?.length > 0 && (
+                    <details className="op-audience-details">
+                      <summary>Voir les contacts exclus ({audience.excluded.length})</summary>
+                      <table className="op-excl-table">
+                        <thead><tr><th>Contact</th><th>Société</th><th>Motif</th><th>Détail</th></tr></thead>
+                        <tbody>
+                          {audience.excluded.map((c, i) => (
+                            <tr key={i}>
+                              <td>{[c.firstName, c.lastName].filter(Boolean).join(' ') || c.email}</td>
+                              <td>{c.companyName ?? '—'}</td>
+                              <td><span className="op-reason-badge">{EXCL_LABELS[c.reason] ?? c.reason}</span></td>
+                              <td className="op-muted">{c.detail ?? '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </details>
+                  )}
+                </>
+              )}
+          </div>
+        )}
+      </div>
 
       <div className="op-sender">
         <div className="op-block-label">Votre signature</div>

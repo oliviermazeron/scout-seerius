@@ -425,3 +425,22 @@
 .op-body { width: 100%; line-height: 1.55; resize: vertical; min-height: 280px; }
 .op-editor-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .op-push-note { margin-top: -4px; }
+
+/* ── Bloc identifiant de campagne ── */
+.op-campaign-block { gap: 8px; }
+.op-campaign-row { display: flex; gap: 8px; align-items: center; }
+.op-campaign-input { flex: 1; font-family: var(--font-mono, monospace); font-size: 12.5px; }
+.op-campaign-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+/* ── Panel audience HubSpot ── */
+.op-audience { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.op-audience-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; }
+.op-audience-inc { color: var(--green, #2a7a2a); font-weight: 600; }
+.op-audience-exc { color: var(--red); font-weight: 600; }
+.op-audience-reason { background: var(--surface2, var(--bg2)); border-radius: 4px; padding: 1px 6px; font-size: 11.5px; color: var(--text-muted); }
+.op-audience-details { font-size: 12px; }
+.op-audience-details summary { cursor: pointer; color: var(--accent); margin-bottom: 6px; }
+.op-excl-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.op-excl-table th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 3px 6px; border-bottom: 1px solid var(--border); }
+.op-excl-table td { padding: 3px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.op-reason-badge { background: var(--gold-light, #fef3c7); color: #7a5820; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
