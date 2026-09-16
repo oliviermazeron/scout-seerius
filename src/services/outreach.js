@@ -173,17 +173,16 @@ function partnerFollowUp(target, contact, sender, subject) {
 }
 
 // ─── Modèles « Deal flow » ────────────────────────────────────────────────────
-const DEALFLOW_PITCH = `Seerius est une société d'investissement qui reprend des participations majoritaires dans des PME suisses de taille small et mid cap.`
+const DEALFLOW_PITCH = [
+  `Nous reprenons des PME suisses et européennes rentables, et nous les transformons opérationnellement.`,
+  `Seerius associe deux compétences rarement réunies. D'un côté, un parcours d'entrepreneur : trois sociétés créées, développées et cédées, à Accenture, Ardian et Interpublic Group. De l'autre, quinze ans de private equity institutionnel, avec la structuration de fonds et des sorties réussies. Nous savons donc à la fois investir et diriger.`,
+  `Société d'investissement genevoise, nous investissons directement au bilan, via un véhicule dédié à chaque opération, aux côtés d'investisseurs suisses sélectionnés.`,
+  `Nous recherchons des sociétés rentables, à cash-flow récurrent, dont la structure financière permet un montage combinant fonds propres et effet de levier. Agnostiques sur le secteur, exigeants sur le profil.`,
+  `Notre valeur ajoutée n'est pas uniquement financière, elle est opérationnelle. Nous accompagnons les dirigeants sur la croissance et déployons une méthodologie de transformation par l'intelligence artificielle qui améliore la productivité de manière mesurable. Nous construisons avec chaque dirigeant une solution de transmission sur mesure, qu'il souhaite se retirer à court, moyen ou long terme, avec la possibilité de réinvestir à nos côtés et de participer à la création de valeur future.`,
+].join('\n\n')
 
-// Le différenciant Seerius : l'accompagnement opérationnel après la reprise
-const OPERATIONAL_EDGE = [
-  `Ce qui distingue Seerius d'un investisseur financier classique, c'est ce qui se passe après la reprise. Nos équipes s'impliquent directement dans l'entreprise, aux côtés du management en place :`,
-  `• un audit des processus pour identifier les vrais leviers de productivité ;`,
-  `• la mise en œuvre concrète de ces améliorations (organisation, workflows, outils), avec l'intelligence artificielle là où elle crée une valeur réelle ;`,
-  `• un objectif mesurable : l'amélioration de l'EBITDA, suivie et documentée.`,
-  ``,
-  `Pour un dirigeant qui cède, c'est la garantie que son entreprise sera développée, et pas seulement détenue.`,
-].join('\n')
+// Différenciant opérationnel (inséré après le pitch dans les emails deal flow)
+const OPERATIONAL_EDGE = ``
 
 const DEALFLOW_HOOKS = {
   avocat: {
