@@ -24,7 +24,18 @@ const SEGMENT_LABELS = {
   conseil_fiscal:       'Conseils fiscaux',
 }
 
-// ─── Templates email par segment (v2 — positionnement Seerius) ───────────────
+// ─── Pitch Seerius commun (v3 — mai 2026) ────────────────────────────────────
+const SEERIUS_PITCH = `Nous reprenons des PME suisses et européennes rentables, et nous les transformons opérationnellement.
+
+Seerius associe deux compétences rarement réunies. D'un côté, un parcours d'entrepreneur : trois sociétés créées, développées et cédées, à Accenture, Ardian et Interpublic Group. De l'autre, quinze ans de private equity institutionnel, avec la structuration de fonds et des sorties réussies. Nous savons donc à la fois investir et diriger.
+
+Société d'investissement genevoise, nous investissons directement au bilan, via un véhicule dédié à chaque opération, aux côtés d'investisseurs suisses sélectionnés.
+
+Nous recherchons des sociétés rentables, à cash-flow récurrent, dont la structure financière permet un montage combinant fonds propres et effet de levier. Agnostiques sur le secteur, exigeants sur le profil.
+
+Notre valeur ajoutée n'est pas uniquement financière, elle est opérationnelle. Nous accompagnons les dirigeants sur la croissance et déployons une méthodologie de transformation par l'intelligence artificielle qui améliore la productivité de manière mesurable. Nous construisons avec chaque dirigeant une solution de transmission sur mesure, qu'il souhaite se retirer à court, moyen ou long terme, avec la possibilité de réinvestir à nos côtés et de participer à la création de valeur future.`
+
+// ─── Templates email par segment (v3 — positionnement Seerius) ───────────────
 const TEMPLATES = {
   banque_cantonale: `Objet : Partenaire sur les successions de PME — Seerius x [Nom banque]
 
@@ -32,7 +43,7 @@ Madame, Monsieur,
 
 Vos équipes PME sont souvent les premières informées qu'un dirigeant envisage de transmettre ou céder son entreprise. C'est précisément là que Seerius intervient.
 
-Nous sommes une société d'investissement spécialisée dans les PME suisses et européennes en succession familiale. Notre particularité : après chaque acquisition, nos équipes auditent les processus de l'entreprise, identifient les vrais leviers de productivité et les déploient — avec le support d'outils d'intelligence artificielle là où c'est pertinent. L'objectif est une amélioration mesurable de l'EBITDA, pas une promesse de disruption.
+${SEERIUS_PITCH}
 
 Ce serait un plaisir d'échanger 20 minutes sur comment nous pouvons collaborer sur ces dossiers.
 
@@ -44,7 +55,7 @@ Madame, Monsieur,
 
 Certains de vos clients entrepreneurs envisagent de céder leur entreprise. Avant qu'ils arrivent chez vous avec leur liquidité, il y a une phase que nous gérons : la préparation et la transaction.
 
-Seerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Ce qui nous distingue du capital-investissement traditionnel : nos équipes s'impliquent directement dans chaque participation après acquisition — audit des processus, identification des gains de productivité, déploiement d'outils IA là où ils créent de la valeur réelle. Pas du capital passif.
+${SEERIUS_PITCH}
 
 Un café pour voir comment nous pouvons nous référer mutuellement ?
 
@@ -54,7 +65,9 @@ Un café pour voir comment nous pouvons nous référer mutuellement ?
 
 Madame, Monsieur,
 
-Seerius investit dans des PME suisses et européennes en succession familiale. Notre approche est opérationnelle : après acquisition, nos équipes travaillent directement avec le management pour auditer les processus, identifier les leviers de productivité et les concrétiser — avec des outils d'intelligence artificielle là où ils améliorent réellement l'EBITDA.
+Vous accompagnez des mandats de cession et voyez passer des dossiers avant qu'ils soient mis sur le marché. C'est exactement là que nous intervenons en tant qu'acquéreur.
+
+${SEERIUS_PITCH}
 
 Nous cherchons des partenaires avec qui travailler dans la durée sur des mandats complémentaires. Disponible 20 minutes ?
 
@@ -66,7 +79,7 @@ Maître,
 
 Vous structurez les cessions. Nous les finançons et nous accompagnons les entreprises après l'acquisition. C'est une complémentarité naturelle.
 
-Seerius investit dans des PME suisses et européennes en succession familiale. Après chaque acquisition, nos équipes travaillent directement avec le management : audit des processus, refonte des workflows, déploiement d'outils d'intelligence artificielle là où ils améliorent concrètement l'EBITDA. Une approche opérationnelle, pas seulement financière.
+${SEERIUS_PITCH}
 
 Nous cherchons des avocats M&A avec qui travailler dans la durée. Disponible 20 minutes ?
 
@@ -78,7 +91,7 @@ Maître,
 
 Vous formalisez les transmissions. Certains de vos clients dirigeants s'interrogent sur leur succession bien avant d'en parler à leur banquier ou à leur avocat. Si c'est le cas, nous pouvons intervenir très en amont.
 
-Seerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Notre approche est opérationnelle : après acquisition, nos équipes auditent les processus de chaque entreprise, identifient les leviers de productivité et les concrétisent — avec le support de l'intelligence artificielle là où elle apporte une vraie valeur.
+${SEERIUS_PITCH}
 
 Un échange de 20 minutes pour se connaître ?
 
@@ -90,7 +103,7 @@ Madame, Monsieur,
 
 Vous êtes souvent le premier confident d'un dirigeant qui pense à transmettre son entreprise. Vous voyez les comptes, vous connaissez la réalité de l'entreprise.
 
-Seerius investit dans des PME suisses et européennes en succession familiale. Ce qui nous distingue : nous ne sommes pas des investisseurs passifs. Après chaque acquisition, nos équipes travaillent avec le management pour auditer les processus, identifier les gains de productivité réels et les déployer — avec des outils IA là où c'est justifié. L'objectif : une amélioration mesurable de l'EBITDA, documentée et publiée.
+${SEERIUS_PITCH}
 
 Si vous avez des clients qui réfléchissent à leur succession, nous serions un partenaire sérieux à leur présenter. 20 minutes pour se présenter ?
 
@@ -102,7 +115,7 @@ Madame, Monsieur,
 
 La réflexion fiscale précède souvent la décision de céder. Vos clients vous posent ces questions avant d'en parler ailleurs — c'est exactement à ce stade que nous pouvons intervenir ensemble.
 
-Seerius investit dans des PME suisses et européennes en succession familiale. Notre rôle va au-delà du capital : après acquisition, nos équipes auditent les processus des entreprises, identifient les leviers de productivité et déploient des outils d'intelligence artificielle là où ils améliorent concrètement l'EBITDA. Votre expertise fiscale reste centrale dans la structuration de ces opérations.
+${SEERIUS_PITCH}
 
 Un échange de 20 minutes pour voir comment travailler ensemble ?
 
@@ -114,7 +127,7 @@ Madame, Monsieur,
 
 Certains de vos clients cherchent des placements dans l'économie réelle — des participations dans des PME suisses solides, hors des marchés cotés.
 
-Seerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Nous ne sommes pas des investisseurs passifs : après chaque acquisition, nos équipes s'impliquent opérationnellement pour auditer les processus, identifier les leviers de productivité et les déployer avec des outils IA là où c'est pertinent.
+${SEERIUS_PITCH}
 
 Seriez-vous disponible pour un échange ?
 
@@ -124,7 +137,9 @@ Seriez-vous disponible pour un échange ?
 
 Madame, Monsieur,
 
-Seerius est une société d'investissement dans les PME suisses et européennes en succession familiale. Notre différence : après chaque acquisition, nos équipes travaillent directement avec le management — audit des processus, refonte des workflows, déploiement d'outils IA là où ils créent de la valeur réelle. Pas du capital passif.
+Vous gérez des stratégies d'investissement diversifiées. Nous pourrions représenter une source d'accès à des opportunités dans l'économie réelle, hors marchés cotés.
+
+${SEERIUS_PITCH}
 
 Nous pourrions échanger sur des opportunités de co-investissement correspondant à vos stratégies. Un échange de 20 minutes ?
 
@@ -134,9 +149,9 @@ Nous pourrions échanger sur des opportunités de co-investissement correspondan
 
 Madame, Monsieur,
 
-Seerius investit dans des PME suisses et européennes en succession familiale — des entreprises solides, hors des marchés cotés, avec une vraie création de valeur opérationnelle.
+Les family offices que nous rencontrons cherchent souvent des placements dans l'économie réelle — des entreprises solides, hors des marchés cotés, avec une vraie création de valeur opérationnelle.
 
-Notre particularité : après chaque acquisition, nos équipes auditent les processus, identifient les vrais leviers de productivité et les déploient — avec des outils d'intelligence artificielle là où c'est pertinent. L'objectif est une amélioration mesurable de l'EBITDA, documentée et publiée.
+${SEERIUS_PITCH}
 
 Seriez-vous ouverts à un échange confidentiel ?
 
@@ -146,9 +161,9 @@ Seriez-vous ouverts à un échange confidentiel ?
 
 Madame, Monsieur,
 
-Seerius investit dans des PME suisses et européennes en succession familiale. Pour les familles que vous gérez, nous pouvons représenter une source d'accès à des opportunités dans l'économie réelle — avec une approche opérationnelle qui va au-delà du capital.
+Pour les familles que vous gérez, nous pouvons représenter une source d'accès à des opportunités dans l'économie réelle — avec une approche opérationnelle qui va au-delà du capital.
 
-Après chaque acquisition, nos équipes s'impliquent directement : audit des processus, identification des gains de productivité, déploiement d'outils IA là où ils améliorent l'EBITDA. Une création de valeur mesurable et documentée.
+${SEERIUS_PITCH}
 
 Seriez-vous disponible pour un échange ?
 
