@@ -100,23 +100,75 @@ function encodeWord(s) {
   return /^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${Buffer.from(s, 'utf8').toString('base64')}?=`
 }
 
-export async function sendGmail({ fromName, to, subject, text, threadId, inReplyTo }) {
+function b64(str) {
+  return Buffer.from(str, 'utf8').toString('base64').replace(/.{76}(?=.)/g, '$&\r\n')
+}
+
+// Génère un boundary qui ne figure pas dans le contenu.
+function makeBoundary(...parts) {
+  let b
+  do { b = `----=_Part_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}` }
+  while (parts.some((p) => p.includes(b)))
+  return b
+}
+
+// Construit le MIME complet (text/plain + text/html) ou plain seul si html absent.
+// Retourne le raw base64url prêt pour l'API Gmail.
+function buildRaw({ name, accountEmail, to, subject, text, html, inReplyTo }) {
+  const commonHeaders = [
+    `From: ${name ? `${encodeWord(name)} <${accountEmail}>` : accountEmail}`,
+    `To: ${oneLine(to)}`,
+    `Subject: ${encodeWord(oneLine(subject))}`,
+    'MIME-Version: 1.0',
+  ]
+  if (inReplyTo) {
+    commonHeaders.push(`In-Reply-To: ${oneLine(inReplyTo)}`, `References: ${oneLine(inReplyTo)}`)
+  }
+
+  let mime
+  if (html) {
+    const boundary = makeBoundary(text, html)
+    const parts = [
+      `--${boundary}`,
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      b64(text),
+      '',
+      `--${boundary}`,
+      'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      b64(html),
+      '',
+      `--${boundary}--`,
+    ].join('\r\n')
+
+    mime = [
+      ...commonHeaders,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      '',
+      parts,
+    ].join('\r\n')
+  } else {
+    mime = [
+      ...commonHeaders,
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      b64(text),
+    ].join('\r\n')
+  }
+
+  return Buffer.from(mime, 'utf8').toString('base64url')
+}
+
+export async function sendGmail({ fromName, to, subject, text, html, threadId, inReplyTo }) {
   const account = await gmailAccount()
   if (!account) throw Object.assign(new Error('Gmail non connecté'), { code: 'GMAIL_DISCONNECTED' })
 
   const name = oneLine(fromName).replace(/["<>]/g, '')
-  const headers = [
-    `From: ${name ? `${encodeWord(name)} <${account.email}>` : account.email}`,
-    `To: ${oneLine(to)}`,
-    `Subject: ${encodeWord(oneLine(subject))}`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=UTF-8',
-    'Content-Transfer-Encoding: base64',
-  ]
-  if (inReplyTo) headers.push(`In-Reply-To: ${oneLine(inReplyTo)}`, `References: ${oneLine(inReplyTo)}`)
-
-  const body = Buffer.from(text, 'utf8').toString('base64').replace(/.{76}(?=.)/g, '$&\r\n')
-  const raw = Buffer.from(`${headers.join('\r\n')}\r\n\r\n${body}`, 'utf8').toString('base64url')
+  const raw = buildRaw({ name, accountEmail: account.email, to, subject, text, html, inReplyTo })
 
   const sent = await gmailApi('/messages/send', { method: 'POST', body: { raw, ...(threadId ? { threadId } : {}) } })
   const meta = await gmailApi(`/messages/${sent.id}?format=metadata&metadataHeaders=Message-ID`)

@@ -6,7 +6,8 @@ import { redis, redisOne, hgetJSON, hsetJSON, hgetallJSON } from './redis.js'
 import { emailToken } from './access.js'
 import { isDryRun, logDryRun } from './config.js'
 import { commsEnabled, unsubscribe, DEFAULT_AUDIENCE } from './hubspot-comms.js'
-import { logEmail } from './hubspot-scout.js'
+import { logEmail, markDoNotEmail } from './hubspot-scout.js'
+import { signatureHtml, signatureText } from './signature.js'
 
 export const SENDS_KEY    = 'scout:scout_outreach_sends'
 export const OPTOUT_KEY   = 'scout:scout_outreach_optout'
@@ -49,7 +50,39 @@ export const unsubscribeSubject = (email, audience = DEFAULT_AUDIENCE) =>
 export function withUnsubscribe(text, origin, email, audience = DEFAULT_AUDIENCE) {
   const audienceParam = audience === DEFAULT_AUDIENCE ? '' : `&a=${encodeURIComponent(audience)}`
   const url = `${origin}/api/outreach/unsubscribe?e=${encodeURIComponent(email)}${audienceParam}&t=${emailToken(unsubscribeSubject(email, audience))}`
-  return `${text}\n\n—\nSi vous ne souhaitez plus recevoir de message de ma part, répondez simplement « stop » ou cliquez ici : ${url}`
+  return `${text}\n\n${signatureText()}\n\n—\nSi vous ne souhaitez plus recevoir de message de ma part, répondez simplement « stop » ou cliquez ici : ${url}`
+}
+
+// ─── Corps HTML complet (body + signature + désinscription) ──────────────────
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function textToHtmlParagraphs(text) {
+  return text.split(/\n\n+/).map((para) => {
+    const inner = escHtml(para).replace(/\n/g, '<br>')
+    return `<p style="font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:22px;color:#333333;margin:0 0 16px 0;">${inner}</p>`
+  }).join('\n')
+}
+
+export function buildHtmlBody(text, origin, email, audience = DEFAULT_AUDIENCE) {
+  const audienceParam = audience === DEFAULT_AUDIENCE ? '' : `&a=${encodeURIComponent(audience)}`
+  const url = `${origin}/api/outreach/unsubscribe?e=${encodeURIComponent(email)}${audienceParam}&t=${emailToken(unsubscribeSubject(email, audience))}`
+  const unsubHtml = `<p style="font-family:Helvetica,Arial,sans-serif;font-size:11px;line-height:17px;color:#9C9C9C;margin:16px 0 0 0;">Si vous ne souhaitez plus recevoir de message de ma part, répondez simplement « stop » ou <a href="${url}" style="color:#9C9C9C;">cliquez ici</a>.</p>`
+
+  return `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+<tr><td style="padding:24px 24px 0 24px;">
+${textToHtmlParagraphs(text)}
+</td></tr>
+<tr><td style="padding:24px;">
+${signatureHtml()}
+${unsubHtml}
+</td></tr>
+</table>
+</body></html>`
 }
 
 // ─── Désinscriptions ──────────────────────────────────────────────────────────
@@ -79,6 +112,7 @@ export async function optOut(email, source, audience = DEFAULT_AUDIENCE) {
       const r = await unsubscribe(e, audience)
       synced = r.ok
       error = r.ok ? null : r.error
+      if (r.ok) markDoNotEmail(e).catch(() => {}) // best-effort, ne bloque pas
     } catch (err) {
       error = err.message
     }
@@ -140,10 +174,14 @@ export async function logToHubSpot(email, gmailId) {
 
   await update({ state: 'pending', attemptAt: Date.now() })
   try {
+    const aud = record.audience ?? DEFAULT_AUDIENCE
+    const fullText = withUnsubscribe(entry.body, entry.origin, key, aud)
+    const fullHtml = buildHtmlBody(entry.body, entry.origin, key, aud)
     const r = await logEmail({
       contactId: record.contactId,
       subject: entry.subject,
-      text: withUnsubscribe(entry.body, entry.origin, key, record.audience ?? DEFAULT_AUDIENCE),
+      text: fullText,
+      html: fullHtml,
       from: record.from,
       to: key,
       timestamp: entry.timestamp,

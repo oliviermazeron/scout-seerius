@@ -25,7 +25,7 @@ import { emailProblems } from '../../../../src/services/emailGuard.js'
 import { redis, hgetJSON } from '../../redis.js'
 import {
   SENDS_KEY, PIPELINE_KEY, DAILY_CAP, FOLLOW_UP_DAYS, DAY_MS, EMAIL_RE,
-  normEmail, takeQuota, releaseQuota, quotaUsed, withUnsubscribe, pendingOptOut, logToHubSpot,
+  normEmail, takeQuota, releaseQuota, quotaUsed, withUnsubscribe, buildHtmlBody, pendingOptOut, logToHubSpot,
 } from '../../outreach.js'
 
 reportConfig()
@@ -130,7 +130,13 @@ export default async function handler(req, res) {
     }
     let sent
     try {
-      sent = await sendGmail({ fromName: senderName, to, subject: email.subject, text: withUnsubscribe(email.body, origin, to, audience) })
+      sent = await sendGmail({
+        fromName: senderName,
+        to,
+        subject: email.subject,
+        text: withUnsubscribe(email.body, origin, to, audience),
+        html: buildHtmlBody(email.body, origin, to, audience),
+      })
     } catch (err) {
       await releaseQuota(window.date)
       throw err

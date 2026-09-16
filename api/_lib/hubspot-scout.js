@@ -97,7 +97,7 @@ async function emailToContactType() {
 // hs_email_headers (JSON sérialisé from / to).
 // → { ok: true, id } | { ok: false, error } ; lève err.uncertain si HubSpot n'a
 //   pas répondu (l'email a peut-être été créé : ne pas rejouer automatiquement).
-export function emailPayload({ contactId, subject, text, from, to, timestamp, associationTypeId }) {
+export function emailPayload({ contactId, subject, text, html, from, to, timestamp, associationTypeId }) {
   return {
     properties: {
       hs_timestamp: timestamp,
@@ -105,6 +105,7 @@ export function emailPayload({ contactId, subject, text, from, to, timestamp, as
       hs_email_status: 'SENT',
       hs_email_subject: subject,
       hs_email_text: text,
+      ...(html ? { hs_email_html: html } : {}),
       hs_email_headers: JSON.stringify({ from: { email: from }, to: [{ email: to }], cc: [], bcc: [] }),
     },
     associations: [{
@@ -291,6 +292,21 @@ export async function createTask({ subject, template, companyId, contactId, owne
   return r.ok ? { ok: true, taskId: r.data?.engagement?.id } : { ok: false, error: r.data?.message ?? `HTTP ${r.status}` }
 }
 
+// Marque le contact « Do not email » dans HubSpot (propriété hs_email_optout).
+// Identifie le contact par son adresse email (idProperty=email).
+// Un 404 signifie que le contact n'existe pas encore : on ne crée pas, on passe.
+export async function markDoNotEmail(email) {
+  const r = await request(
+    `/crm/v3/objects/contacts/${encodeURIComponent(String(email).trim().toLowerCase())}?idProperty=email`,
+    { method: 'PATCH', body: { properties: { hs_email_optout: true } } },
+  )
+  if (!r.ok && r.status !== 404) {
+    console.warn(`[SCOUT] markDoNotEmail ${email} : HTTP ${r.status} — ${r.data?.message ?? 'erreur'}`)
+  }
+  return r.ok
+}
+
+// email : { contactId, subject, text, html?, from, to, timestamp }
 export async function logEmail(email) {
   const associationTypeId = await emailToContactType()
   const r = await request('/crm/v3/objects/emails', { method: 'POST', body: emailPayload({ ...email, associationTypeId }) })

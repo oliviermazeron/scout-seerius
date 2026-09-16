@@ -110,11 +110,6 @@ function salutation(segment, contact) {
   return name ? `Bonjour ${name},` : 'Madame, Monsieur,'
 }
 
-// Le nom du signataire est obligatoire (vérifié dans buildEmail) : pas de placeholder
-function signature(sender) {
-  return [sender.name.trim(), sender.title?.trim(), 'Seerius', sender.phone?.trim()].filter(Boolean).join('\n')
-}
-
 function inPerson(city) {
   return city ? `à ${city}` : 'en personne'
 }
@@ -155,7 +150,6 @@ function partnerEmail(target, contact, sender) {
       PARTNER_PITCH,
       hook.close,
       `Seriez-vous disponible pour un premier échange de 20 minutes dans les prochaines semaines — en visio, ou ${target.municipality ? `autour d'un café à ${target.municipality}` : 'en personne'} si vous préférez ? Je m'adapte volontiers à vos disponibilités.`,
-      `Avec mes meilleures salutations,\n\n${signature(sender)}`,
     ].join('\n\n'),
   }
 }
@@ -167,7 +161,6 @@ function partnerFollowUp(target, contact, sender, subject) {
       salutation(target.segment, contact),
       `Je me permets de revenir vers vous suite à mon message de la semaine dernière au sujet d'une collaboration entre ${target.name} et Seerius autour des transmissions de PME.`,
       `Un échange de 20 minutes, en visio ou en personne, suffirait pour voir si nos approches se rejoignent. Auriez-vous un créneau dans les deux prochaines semaines ?`,
-      `Avec mes meilleures salutations,\n\n${signature(sender)}`,
     ].join('\n\n'),
   }
 }
@@ -216,10 +209,22 @@ const DEALFLOW_HOOKS = {
 const isRemoved = (value) => value === null
 const LISTED_CRITERIA = DEAL_CRITERIA_FIELDS.filter((f) => f.id !== 'responseTime')
 
+// Si la valeur saisie est un entier brut (ex. "1000000"), la formater en CHF avec
+// séparateur suisse (apostrophe). Toute autre forme est conservée telle quelle.
+function formatCriteriaValue(id, value) {
+  const s = String(value).trim()
+  if (/^\d+$/.test(s)) {
+    const n = parseInt(s, 10)
+    const formatted = n.toLocaleString('fr-CH').replace(/\s/g, '’') // apostrophe suisse
+    return id === 'ca' || id === 'ebitda' ? `CHF ${formatted}` : formatted
+  }
+  return s
+}
+
 function criteriaBlock(c) {
   const lines = LISTED_CRITERIA
     .filter((f) => !isRemoved(c[f.id]))
-    .map((f) => `• ${f.label} : ${String(c[f.id]).trim()}`)
+    .map((f) => `• ${f.label} : ${formatCriteriaValue(f.id, c[f.id])}`)
   return lines.length ? ['Les dossiers que nous recherchons :', ...lines].join('\n') : null
 }
 
@@ -238,7 +243,6 @@ function dealflowEmail(target, contact, sender, criteria) {
       criteriaBlock(criteria),
       hook.ask,
       `Nous revenons ${responseDelay(criteria)} avec une position claire, en toute confidentialité. Seriez-vous ouvert à un échange de 20 minutes, en visio ou ${inPerson(target.municipality)}, pour vous présenter notre approche et comprendre les dossiers que vous accompagnez ?`,
-      `Avec mes meilleures salutations,\n\n${signature(sender)}`,
     ].filter(Boolean).join('\n\n'),
   }
 }
@@ -259,7 +263,6 @@ function dealflowFollowUp(target, contact, sender, subject, criteria) {
       salutation(target.segment, contact),
       `Je me permets de revenir vers vous au sujet de mon message de la semaine dernière : Seerius recherche des PME suisses à reprendre${sizeSummary(criteria)} — en repreneur qui s'implique opérationnellement après la reprise, pas en simple investisseur financier.`,
       `Si un dossier correspondant se présente chez ${target.name}, un simple email avec un teaser anonymisé suffit : nous revenons ${responseDelay(criteria)}. Et si un échange de 20 minutes en visio vous convient pour faire connaissance, je m'adapte à vos disponibilités.`,
-      `Avec mes meilleures salutations,\n\n${signature(sender)}`,
     ].join('\n\n'),
   }
 }

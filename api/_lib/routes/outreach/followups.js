@@ -14,7 +14,7 @@ import { commsEnabled, checkSubscription, DEFAULT_AUDIENCE } from '../../hubspot
 import { moveDealToStage } from '../../hubspot-scout.js'
 import { hgetJSON, hgetallJSON } from '../../redis.js'
 import {
-  SENDS_KEY, DAY_MS, takeQuota, releaseQuota, withUnsubscribe, saveSend, optOut, pendingOptOut,
+  SENDS_KEY, DAY_MS, takeQuota, releaseQuota, withUnsubscribe, buildHtmlBody, saveSend, optOut, pendingOptOut,
   retryPendingOptOuts, retryEmailLogs, logToHubSpot,
 } from '../../outreach.js'
 
@@ -111,9 +111,13 @@ export default async function handler(req, res) {
       let sent
       try {
         sent = await sendGmail({
-          fromName: record.senderName, to: record.email, subject: record.followUp.subject,
+          fromName: record.senderName,
+          to: record.email,
+          subject: record.followUp.subject,
           text: withUnsubscribe(record.followUp.body, origin, record.email, audience),
-          threadId: record.threadId, inReplyTo: record.messageId,
+          html: buildHtmlBody(record.followUp.body, origin, record.email, audience),
+          threadId: record.threadId,
+          inReplyTo: record.messageId,
         })
       } catch (err) {
         await releaseQuota(window.date)
