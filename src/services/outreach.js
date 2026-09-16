@@ -22,6 +22,11 @@ export const OBJECTIVES = {
   partenariat: { label: 'Partenariat', desc: 'Présenter Seerius et nouer une relation de recommandation' },
 }
 
+// Masquer les critères d'acquisition dans l'interface et les emails.
+// Les composants, la logique d'injection et le stockage sont conservés pour une
+// réactivation sans réécriture.
+export const SHOW_ACQUISITION_CRITERIA = false
+
 // Critères d'acquisition cités dans les emails deal flow (modifiables dans la page)
 export const DEAL_CRITERIA_FIELDS = [
   { id: 'ca',           label: "Chiffre d'affaires" },
@@ -104,10 +109,10 @@ export function setPipelineStatus(id, statut) {
 // ─── Éléments communs ─────────────────────────────────────────────────────────
 function salutation(segment, contact) {
   if (segment === 'avocat' || segment === 'notaire') {
-    return contact?.lastName ? `Maître ${contact.lastName},` : 'Maître,'
+    return contact?.lastName ? `Bonjour Maître ${contact.lastName},` : 'Bonjour Madame, Monsieur,'
   }
   const name = [contact?.firstName, contact?.lastName].filter(Boolean).join(' ')
-  return name ? `Bonjour ${name},` : 'Madame, Monsieur,'
+  return name ? `Bonjour ${name},` : 'Bonjour Madame, Monsieur,'
 }
 
 function inPerson(city) {
@@ -166,6 +171,19 @@ function partnerFollowUp(target, contact, sender, subject) {
 }
 
 // ─── Modèles « Deal flow » ────────────────────────────────────────────────────
+
+// Tronc commun §3–§6, identique dans les trois nouveaux templates (avocat/fiduciaire/conseil_fiscal)
+const SEERIUS_INTRO = `Seerius est une société d'investissement genevoise spécialisée dans la prise de participation et l'accompagnement de PME suisses, notamment dans le cadre de transmissions. Ses associés ont créé et cédé leurs propres sociétés — à Accenture, Ardian, Interpublic Group et Morningstar — et cumulent quinze ans de private equity institutionnel.`
+
+const CORE_INVESTMENT = `Nous investissons directement au bilan, via un véhicule dédié à chaque opération, aux côtés d'investisseurs suisses sélectionnés. Nous construisons avec chaque dirigeant une solution de transmission sur mesure : LBO, LMBO, cession progressive, réinvestissement du cédant à nos côtés. Nous travaillons naturellement en coordination avec les conseils déjà en place, pour la structuration juridique et fiscale comme pour le suivi de leurs clients.`
+
+const CORE_OPERATIONS = `Après l'opération, notre valeur ajoutée est avant tout opérationnelle. Nous appuyons le management sur la croissance, organique et par build-up, et sur l'internationalisation. Nous déployons aussi une méthodologie de transformation par l'intelligence artificielle aux résultats mesurables.`
+
+const CORE_TARGET = `Nous recherchons des sociétés rentables, à cash-flow récurrent, en croissance ou bien établies sur leur marché, quel que soit le secteur. Nous regardons en particulier les situations où le dirigeant prépare sa succession ou souhaite s'adosser à un partenaire pour franchir une étape.`
+
+const DEALFLOW_ASK = `Si certains de vos clients se posent ces questions, je serais heureux d'échanger avec vous une vingtaine de minutes, en visio ou par téléphone, en toute confidentialité. Vous pouvez réserver directement un créneau via le lien de prise de rendez-vous figurant dans ma signature, ou simplement me proposer une date à votre convenance en répondant à cet email.`
+
+// Legacy pitch pour le path notaire uniquement (template inchangé)
 const DEALFLOW_PITCH = [
   `Nous reprenons des PME suisses et européennes rentables, et nous les transformons opérationnellement.`,
   `Seerius associe deux compétences rarement réunies. D'un côté, un parcours d'entrepreneur : trois sociétés créées, développées et cédées, à Accenture, Ardian et Interpublic Group. De l'autre, quinze ans de private equity institutionnel, avec la structuration de fonds et des sorties réussies. Nous savons donc à la fois investir et diriger.`,
@@ -174,33 +192,50 @@ const DEALFLOW_PITCH = [
   `Notre valeur ajoutée n'est pas uniquement financière, elle est opérationnelle. Nous accompagnons les dirigeants sur la croissance et déployons une méthodologie de transformation par l'intelligence artificielle qui améliore la productivité de manière mesurable. Nous construisons avec chaque dirigeant une solution de transmission sur mesure, qu'il souhaite se retirer à court, moyen ou long terme, avec la possibilité de réinvestir à nos côtés et de participer à la création de valeur future.`,
 ].join('\n\n')
 
-// Différenciant opérationnel (inséré après le pitch dans les emails deal flow)
-const OPERATIONAL_EDGE = ``
-
 const DEALFLOW_HOOKS = {
+  // ── Nouveaux templates v2 ─────────────────────────────────────────────────
   avocat: {
-    subject: () => `Dossiers de cession PME — critères d'acquisition Seerius`,
-    intro: `Vous accompagnez des actionnaires de PME dans la cession de leur société, et voyez passer des dossiers bien avant qu'ils ne soient mis sur le marché.`,
-    edge: `Pour vos clients cédants, c'est un acquéreur qui apporte davantage qu'un prix : un projet crédible pour l'entreprise, souvent déterminant dans le choix du repreneur.`,
-    ask: `Si vous conseillez des actionnaires qui envisagent de céder, ou si vous accompagnez un processus de vente à la recherche d'un acquéreur, nous serions heureux d'étudier ces dossiers. Un teaser anonymisé suffit pour un premier retour, et un accord de confidentialité peut être signé en amont.`,
+    subject: () => `Seerius — repreneur pour les PME de vos clients en transmission`,
+    body: (target, contact) => [
+      salutation(target.segment, contact),
+      `Vous accompagnez des actionnaires de PME dans la cession de leur société, et vous voyez ces dossiers bien avant qu'ils n'arrivent sur le marché. Ce que cherche un cédant, au-delà du prix, c'est un projet crédible pour son entreprise et pour ses équipes.`,
+      SEERIUS_INTRO,
+      CORE_INVESTMENT,
+      CORE_OPERATIONS,
+      CORE_TARGET,
+      DEALFLOW_ASK,
+    ].join('\n\n'),
   },
+  fiduciaire: {
+    subject: () => `Seerius — repreneur pour les PME de vos clients qui préparent leur succession`,
+    body: (target, contact) => [
+      salutation(target.segment, contact),
+      `Vous tenez les comptes de dirigeants de PME depuis des années. Vous êtes souvent les premiers au courant quand l'un d'eux commence à penser à sa succession — bien avant qu'un mandat de vente ne soit lancé, et parfois avant qu'il n'en parle à quiconque.`,
+      `${SEERIUS_INTRO} Nous intervenons précisément à ce stade amont, en coordination avec la fiduciaire en place, qui conserve naturellement son mandat après l'opération.`,
+      CORE_INVESTMENT,
+      CORE_OPERATIONS,
+      CORE_TARGET,
+      DEALFLOW_ASK,
+    ].join('\n\n'),
+  },
+  conseil_fiscal: {
+    subject: () => `Seerius — un repreneur souple sur la structuration pour les transmissions de vos clients`,
+    body: (target, contact) => [
+      salutation(target.segment, contact),
+      `Dans une transmission de PME, c'est souvent le traitement fiscal qui dicte la forme et le calendrier de l'opération : transposition, liquidation partielle indirecte, étalement de la cession, réinvestissement du cédant. Un repreneur rigide sur le montage réduit d'autant votre marge de manœuvre.`,
+      `${SEERIUS_INTRO} Nous investissons via un véhicule dédié à chaque opération, ce qui nous laisse libres d'adapter le montage à ce que la fiscalité du dossier commande.`,
+      `Nous investissons directement au bilan, aux côtés d'investisseurs suisses sélectionnés, et nous construisons avec chaque dirigeant une solution de transmission sur mesure : LBO, LMBO, cession progressive, réinvestissement du cédant à nos côtés. Nous travaillons naturellement en coordination avec les conseils déjà en place, pour la structuration juridique et fiscale comme pour le suivi de leurs clients.`,
+      CORE_OPERATIONS,
+      CORE_TARGET,
+      DEALFLOW_ASK,
+    ].join('\n\n'),
+  },
+  // ── Template legacy (notaire inchangé) ───────────────────────────────────
   notaire: {
     subject: () => `Transmissions d'entreprises sans repreneur — Seerius`,
     intro: `Lors de la préparation d'une succession, vous rencontrez des dirigeants dont l'entreprise n'a pas de repreneur identifié dans la famille ou parmi les cadres.`,
     edge: `Pour un dirigeant attaché à son entreprise, c'est l'assurance d'une continuité : l'entreprise, ses emplois et son ancrage local sont préservés et développés.`,
     ask: `Lorsque c'est le cas, nous étudions volontiers ces situations très en amont, en toute discrétion. Un teaser anonymisé suffit pour un premier retour.`,
-  },
-  fiduciaire: {
-    subject: () => `Vos clients dirigeants sans successeur — Seerius, repreneur`,
-    intro: `Parmi vos clients, certains dirigeants approchent de la retraite sans successeur identifié. Vous connaissez leurs comptes mieux que quiconque, et êtes souvent le premier à savoir qu'ils envisagent de vendre.`,
-    edge: `Vous connaissez les marges de progrès de vos clients ; notre métier est précisément de les concrétiser après la reprise. Et le mandat de la fiduciaire reste en place.`,
-    ask: `Nous étudions volontiers ces situations, même à un stade préliminaire. Un teaser anonymisé suffit pour un premier retour.`,
-  },
-  conseil_fiscal: {
-    subject: () => `Cessions de PME en préparation — Seerius, acquéreur`,
-    intro: `Lorsque vous travaillez sur la planification successorale d'un dirigeant ou la structuration fiscale d'une vente, la question de l'acquéreur se pose rapidement.`,
-    edge: `Une reprise préparée avec un acquéreur impliqué opérationnellement facilite la structuration de l'opération et la transition du dirigeant.`,
-    ask: `Si l'un de vos clients prépare la cession de sa société et n'a pas encore d'acquéreur, nous serions heureux d'étudier le dossier. Votre rôle dans la structuration de l'opération reste entier, et nous travaillons en coordination avec vous.`,
   },
 }
 
@@ -232,15 +267,19 @@ const responseDelay = (c) => (isRemoved(c.responseTime) ? 'rapidement' : `sous $
 
 function dealflowEmail(target, contact, sender, criteria) {
   const hook = DEALFLOW_HOOKS[target.segment] ?? DEALFLOW_HOOKS.fiduciaire
+  // Nouveaux templates v2 : corps entier fourni par hook.body
+  if (hook.body) {
+    return { subject: hook.subject(target.name), body: hook.body(target, contact) }
+  }
+  // Legacy path (notaire uniquement)
   return {
     subject: hook.subject(target.name),
     body: [
       salutation(target.segment, contact),
       hook.intro,
       DEALFLOW_PITCH,
-      OPERATIONAL_EDGE,
       hook.edge,
-      criteriaBlock(criteria),
+      SHOW_ACQUISITION_CRITERIA ? criteriaBlock(criteria) : null,
       hook.ask,
       `Nous revenons ${responseDelay(criteria)} avec une position claire, en toute confidentialité. Seriez-vous ouvert à un échange de 20 minutes, en visio ou ${inPerson(target.municipality)}, pour vous présenter notre approche et comprendre les dossiers que vous accompagnez ?`,
     ].filter(Boolean).join('\n\n'),
@@ -277,7 +316,7 @@ function missingData(target, sender, settings) {
   const missing = []
   if (!String(target?.name ?? '').trim()) missing.push('société du contact manquante')
   if (!String(sender?.name ?? '').trim()) missing.push('nom du signataire manquant (« Votre signature »)')
-  if (settings?.objective !== 'partenariat') {
+  if (settings?.objective !== 'partenariat' && SHOW_ACQUISITION_CRITERIA) {
     for (const field of DEAL_CRITERIA_FIELDS) {
       const value = settings?.criteria?.[field.id]
       if (value === null) continue // retiré volontairement : non mentionné

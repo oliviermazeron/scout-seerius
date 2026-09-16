@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import {
-  JURIDIQUE_SEGMENTS, OBJECTIVES, DEAL_CRITERIA_FIELDS, readTargets, writeTargets, readSender, writeSender,
+  JURIDIQUE_SEGMENTS, OBJECTIVES, DEAL_CRITERIA_FIELDS, SHOW_ACQUISITION_CRITERIA,
+  readTargets, writeTargets, readSender, writeSender,
   readSettings, writeSettings, readPipeline, setPipelineStatus, buildEmail, buildFollowUp,
 } from '../services/outreach.js'
 import { secureFetch, getAccessCode, setAccessCode } from '../services/access.js'
@@ -741,7 +742,7 @@ export default function OutreachPanel({ onNavigate }) {
             </button>
           ))}
         </div>
-        {settings.objective === 'dealflow' && (
+        {settings.objective === 'dealflow' && SHOW_ACQUISITION_CRITERIA && (
           <>
             <div className="op-criteria">
               {DEAL_CRITERIA_FIELDS.filter((f) => settings.criteria[f.id] !== null).map((f) => (
