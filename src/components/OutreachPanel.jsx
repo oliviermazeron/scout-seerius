@@ -474,7 +474,7 @@ export default function OutreachPanel({ onNavigate }) {
         companyName: t.name,
         role: t.contact.role ?? '',
       }))
-    const { ok, data } = await secureFetch('/api/campaign/audience', {
+    const { ok, data } = await secureFetch('/api/outreach/audience', {
       method: 'POST',
       body: { contacts, campaignId, cooldownDays: 90 },
     })
@@ -487,7 +487,7 @@ export default function OutreachPanel({ onNavigate }) {
     if (!campaignId) return
     setListLoading(true)
     setListState(null)
-    const { ok, data } = await secureFetch('/api/campaign/list', { method: 'POST', body: { campaignId } })
+    const { ok, data } = await secureFetch('/api/outreach/list', { method: 'POST', body: { campaignId } })
     setListState(ok ? data : { ok: false, error: data?.error ?? 'Création impossible', name: `SCOUT — ${campaignId}` })
     setListLoading(false)
   }

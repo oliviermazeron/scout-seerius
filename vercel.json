@@ -2,8 +2,7 @@
   "rewrites": [
     { "source": "/api/gmail/:action", "destination": "/api/gmail?action=:action" },
     { "source": "/api/outreach/:action", "destination": "/api/outreach?action=:action" },
-    { "source": "/api/campaign/:action", "destination": "/api/campaign?action=:action" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+{ "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "crons": [
     { "path": "/api/outreach/followups", "schedule": "0 7 * * 1-5" }

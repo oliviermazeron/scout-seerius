@@ -11,8 +11,10 @@ import send from './_lib/routes/outreach/send.js'
 import followups from './_lib/routes/outreach/followups.js'
 import unsubscribe from './_lib/routes/outreach/unsubscribe.js'
 import qualify from './_lib/routes/outreach/qualify.js'
+import audience from './_lib/routes/campaign/audience.js'
+import list from './_lib/routes/campaign/list.js'
 
-const ROUTES = { send, followups, unsubscribe, qualify }
+const ROUTES = { send, followups, unsubscribe, qualify, audience, list }
 
 export default function handler(req, res) {
   const route = ROUTES[req.query?.action]
