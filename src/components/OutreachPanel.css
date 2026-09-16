@@ -159,6 +159,7 @@
 }
 .op-send--good { color: var(--green); background: var(--green-light); }
 .op-send--bad  { color: var(--red); background: #fde8e8; }
+.op-send--test { color: #7c3aed; background: #ede9fe; }
 
 /* ── Objectif & critères ── */
 .op-objectives { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
@@ -425,6 +426,11 @@
 .op-body { width: 100%; line-height: 1.55; resize: vertical; min-height: 280px; }
 .op-editor-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .op-push-note { margin-top: -4px; }
+
+/* ── Bloc envoi test ── */
+.op-test-send { margin-top: 4px; }
+.op-test-send-row { display: flex; gap: 8px; align-items: center; }
+.op-test-email { flex: 1; font-size: 13px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--input-bg, var(--card-bg)); color: var(--text); }
 
 /* ── Bloc identifiant de campagne ── */
 .op-campaign-block { gap: 8px; }

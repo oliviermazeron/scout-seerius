@@ -157,7 +157,8 @@ function GmailCard({ gmail, notice, checking, checkResult, onUnlock, onConnect, 
 }
 
 // ─── Panneau d'édition d'une cible (destinataire + email) ────────────────────
-function TargetEditor({ t, emailState, edited, hunter, record, sendState, pushState, followUp, gmailReady, onNavigate,
+function TargetEditor({ t, emailState, edited, hunter, record, sendState, pushState, followUp, gmailReady,
+  testEmail, onTestEmailChange, onSendTest, onNavigate,
   onSearchDomain, onFindPerson, onChoose, onDraft, onSend, onPush }) {
   const { email, problems } = emailState
   const incomplete = problems.length > 0
@@ -304,12 +305,34 @@ function TargetEditor({ t, emailState, edited, hunter, record, sendState, pushSt
           <PushButton t={t} state={pushState} incomplete={incomplete} onPush={onPush} />
           <SendButton t={t} record={record} state={sendState} gmailReady={gmailReady} incomplete={incomplete} onSend={onSend} />
         </div>
+        <div className="op-test-send">
+          <div className="op-test-send-row">
+            <input
+              className="op-test-email"
+              value={testEmail}
+              onChange={(e) => onTestEmailChange(e.target.value.trim())}
+              placeholder="olivier+scout-1234@seerius.ch"
+              aria-label="Adresse test"
+            />
+            <button
+              type="button"
+              className="op-btn-light"
+              disabled={!EMAIL_RE.test(testEmail) || !gmailReady || incomplete}
+              title="Envoi réel vers cette adresse — hors créneau autorisé, sans écriture dans la pipeline"
+              onClick={() => onSendTest(t, testEmail)}
+            >
+              ✉️ Envoyer test
+            </button>
+          </div>
+        </div>
         <div className="op-muted op-push-note">
           <strong>✉️ Envoyer</strong> : part immédiatement depuis Gmail et s'enregistre dans HubSpot
           {followUp ? ', relance automatique à J+7 sans réponse' : ''}. Une ligne de désinscription est ajoutée en bas de l'email.
           <br />
           <strong>📋 Tâche HubSpot</strong> : crée le contact et une tâche pour envoyer vous-même
           {followUp ? ' (+ tâche de relance à J+7)' : ''}.
+          <br />
+          <strong>✉️ Envoyer test</strong> : envoi réel vers votre adresse test — hors créneau, sans statut pipeline ni traçabilité HubSpot.
         </div>
       </div>
     </div>
@@ -322,7 +345,8 @@ function SendButton({ t, record, state, gmailReady, incomplete, onSend }) {
   return (
     <>
       {state === 'dry' && <span className="op-send" title="Mode test : rien n'est parti">🧪 Simulé</span>}
-      {state && !['done', 'dry'].includes(state) && <span className="op-error" title={state}>⚠️ {state}</span>}
+      {state === 'test' && <span className="op-send op-send--test" title="Envoi test effectué — hors pipeline">🧪 MODE TEST</span>}
+      {state && !['done', 'dry', 'test'].includes(state) && <span className="op-error" title={state}>⚠️ {state}</span>}
       <button
         className="op-btn-send"
         disabled={!t.contact?.email || !gmailReady || incomplete}
@@ -376,6 +400,7 @@ export default function OutreachPanel({ onNavigate }) {
   const [audienceLoading, setAudienceLoading] = useState(false)
   const [listState, setListState]         = useState(null)   // { ok, listId?, name, error? } | null
   const [listLoading, setListLoading]     = useState(false)
+  const [testRecipients, setTestRecipients] = useState({})   // id → email test (jamais persisté)
 
   const all = Object.values(targets)
   const list = useMemo(() => Object.values(targets)
@@ -649,6 +674,53 @@ export default function OutreachPanel({ onNavigate }) {
     if (!readPipeline()[t.id]) changeStatus(t.id, 'Contacté')
     setSend((s) => ({ ...s, [t.id]: 'done' }))
     return { ok: true }
+  }
+
+  function defaultTestEmail(gmailEmail) {
+    if (!gmailEmail) return ''
+    const at = gmailEmail.indexOf('@')
+    if (at < 0) return gmailEmail
+    const base = gmailEmail.slice(0, at).split('+')[0]
+    const domain = gmailEmail.slice(at + 1)
+    const now = new Date()
+    const tag = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+    return `${base}+scout-${tag}@${domain}`
+  }
+
+  async function sendTest(t, testEmail) {
+    if (!EMAIL_RE.test(testEmail)) return
+    let email
+    let followUpMail
+    try {
+      email = emailFor(t)
+      followUpMail = followUp ? buildFollowUp(t, t.contact, sender, email.subject, settings) : null
+    } catch (err) {
+      setSend((s) => ({ ...s, [t.id]: err.message }))
+      return
+    }
+    const c = { ...t.contact, email: testEmail }
+    if (!window.confirm(`Envoyer un email TEST à ${testEmail} ?\n\nL'email partira depuis ${gmail.email ?? 'Gmail'} — hors créneau autorisé.`)) return
+    setSend((s) => ({ ...s, [t.id]: 'loading' }))
+    const { ok, status, data } = await secureFetch('/api/outreach/send', {
+      method: 'POST',
+      body: {
+        target: { id: t.id, name: t.name, domain: t.domain, canton: t.canton, uid: t.uid, segment: t.segment },
+        contact: c,
+        email,
+        followUp: followUpMail,
+        senderName: sender.name,
+        objective: settings.objective,
+        campaignId: settings.campaignId?.trim() || undefined,
+      },
+    })
+    if (!ok) {
+      setSend((s) => ({ ...s, [t.id]: data.error ?? `Erreur ${status}` }))
+      if (status === 401) setGmail({ state: 'locked', error: "Code d'accès incorrect" })
+      if (data.code === 'GMAIL_DISCONNECTED') loadGmail()
+      return
+    }
+    if (data.dryRun) { setSend((s) => ({ ...s, [t.id]: 'dry' })); return }
+    setSend((s) => ({ ...s, [t.id]: 'test' }))
   }
 
   async function sendSelected() {
@@ -1043,7 +1115,8 @@ export default function OutreachPanel({ onNavigate }) {
                         {record ? <SendBadge record={record} />
                           : sendState === 'loading' ? <span className="op-muted">Envoi…</span>
                           : sendState === 'dry' ? <span className="op-send" title="Mode test : rien n'est parti">🧪 Simulé</span>
-                          : sendState && sendState !== 'done' ? <span className="op-error" title={sendState}>⚠️ {sendState}</span>
+                          : sendState === 'test' ? <span className="op-send op-send--test" title="Envoi test effectué — hors pipeline">🧪 MODE TEST</span>
+                          : sendState && !['done', 'test'].includes(sendState) ? <span className="op-error" title={sendState}>⚠️ {sendState}</span>
                           : push[t.id] === 'loading' ? <span className="op-muted">Création…</span>
                           : t.hubspot ? (
                             <span className="badge badge--green" title={t.hubspot.followUp ? 'Tâche email + relance J+7' : 'Tâche email'}>
@@ -1058,7 +1131,12 @@ export default function OutreachPanel({ onNavigate }) {
                             ✉️ Envoyer
                           </button>
                         )}
-                        <button className={`op-btn-prepare ${isOpen ? 'op-btn-prepare--open' : ''}`} onClick={() => setOpenId(isOpen ? null : t.id)}>
+                        <button className={`op-btn-prepare ${isOpen ? 'op-btn-prepare--open' : ''}`} onClick={() => {
+                          setOpenId(isOpen ? null : t.id)
+                          if (!isOpen && !testRecipients[t.id] && gmail.email) {
+                            setTestRecipients((p) => ({ ...p, [t.id]: defaultTestEmail(gmail.email) }))
+                          }
+                        }}>
                           {isOpen ? '▲ Fermer' : t.contact?.email ? '✏️ Relire' : '✏️ Préparer'}
                         </button>
                         <button className="op-btn-remove" onClick={() => removeTarget(t.id)} title="Retirer de la campagne">✕</button>
@@ -1078,6 +1156,9 @@ export default function OutreachPanel({ onNavigate }) {
                             pushState={push[t.id]}
                             followUp={followUp}
                             gmailReady={gmailReady}
+                            testEmail={testRecipients[t.id] ?? ''}
+                            onTestEmailChange={(v) => setTestRecipients((p) => ({ ...p, [t.id]: v }))}
+                            onSendTest={sendTest}
                             onNavigate={onNavigate}
                             onSearchDomain={searchDomain}
                             onFindPerson={findPerson}

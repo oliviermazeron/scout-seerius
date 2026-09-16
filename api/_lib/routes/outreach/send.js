@@ -12,9 +12,13 @@
 // → { record, quota }  |  { dryRun: true, preview }
 //
 // Ordre des garde-fous (mode réel) :
-//   code d'accès → créneau → module communications actif → pas de doublon →
-//   pas de désinscription en attente → contact HubSpot → statut d'abonnement
-//   HubSpot (fail-closed) → quota → envoi Gmail → journalisation HubSpot
+//   code d'accès → créneau (sauf envoi test) → module communications actif →
+//   pas de doublon (sauf envoi test) → pas de désinscription en attente →
+//   contact HubSpot → statut d'abonnement HubSpot (fail-closed) →
+//   quota (sauf envoi test) → envoi Gmail → journalisation HubSpot
+//
+// Envoi test : destinataire = même base+domaine que le compte Gmail connecté,
+//   ou dans SCOUT_TEST_RECIPIENTS. Calculé côté serveur uniquement.
 
 import { setCors, requireAccess, publicOrigin, sendingWindow } from '../../access.js'
 import { configStatus, reportConfig, isDryRun, logDryRun } from '../../config.js'
@@ -30,6 +34,26 @@ import {
 } from '../../outreach.js'
 
 reportConfig()
+
+// Un envoi est « test » si le destinataire a la même base+domaine que le compte Gmail
+// connecté (ex. olivier+scout-1234@seerius.ch → olivier@seerius.ch), ou s'il figure
+// dans SCOUT_TEST_RECIPIENTS. Jamais calculé depuis un flag client.
+function computeIsTestSend(to, gmailEmail) {
+  if (!to || !gmailEmail) return false
+  const lowerGmail = gmailEmail.toLowerCase()
+  const atG = lowerGmail.indexOf('@')
+  if (atG < 0) return false
+  const baseG = lowerGmail.slice(0, atG).split('+')[0]
+  const domainG = lowerGmail.slice(atG + 1)
+  const lowerTo = to.toLowerCase()
+  const atT = lowerTo.indexOf('@')
+  if (atT < 0) return false
+  const baseT = lowerTo.slice(0, atT).split('+')[0]
+  const domainT = lowerTo.slice(atT + 1)
+  if (baseT === baseG && domainT === domainG) return true
+  const extras = (process.env.SCOUT_TEST_RECIPIENTS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean)
+  return extras.includes(lowerTo)
+}
 
 export default async function handler(req, res) {
   setCors(res, 'POST, OPTIONS')
@@ -54,7 +78,20 @@ export default async function handler(req, res) {
   }
 
   const window = sendingWindow()
-  if (!window.open) return res.status(423).json({ error: `Envoi possible ${window.label}` })
+
+  // Décision test : calculée côté serveur — on ne fait jamais confiance à un flag client
+  let isTestSend = false
+  let account = null
+  if (!isDryRun() && googleConfig()) {
+    try {
+      account = await gmailAccount()
+      isTestSend = computeIsTestSend(to, account?.email ?? null)
+    } catch { /* compte absent : pas d'envoi test */ }
+  }
+
+  if (!window.open && !isTestSend) {
+    return res.status(423).json({ error: `Envoi possible ${window.label}` })
+  }
 
   const origin = publicOrigin(req)
   const followUpMail = followUp?.subject && followUp?.body ? { subject: followUp.subject, body: followUp.body } : null
@@ -92,14 +129,16 @@ export default async function handler(req, res) {
   if (!googleConfig()) return res.status(503).json({ error: 'Identifiants Google non configurés' })
 
   try {
-    const previous = await hgetJSON(SENDS_KEY, to)
-    if (previous) {
-      return res.status(409).json({ error: `Déjà contacté le ${new Date(previous.sentAt).toLocaleDateString('fr-CH')}`, record: previous })
+    if (!isTestSend) {
+      const previous = await hgetJSON(SENDS_KEY, to)
+      if (previous) {
+        return res.status(409).json({ error: `Déjà contacté le ${new Date(previous.sentAt).toLocaleDateString('fr-CH')}`, record: previous })
+      }
     }
     if (await pendingOptOut(to)) {
       return res.status(409).json({ error: `${to} a demandé à ne plus être contacté` })
     }
-    const account = await gmailAccount()
+    if (!account) account = await gmailAccount()
     if (!account) return res.status(409).json({ error: 'Gmail non connecté', code: 'GMAIL_DISCONNECTED' })
 
     // 1. HubSpot (clé SCOUT) : société + contact
@@ -125,8 +164,8 @@ export default async function handler(req, res) {
       return res.status(409).json({ error: `${to} est désinscrit dans HubSpot`, code: 'UNSUBSCRIBED' })
     }
 
-    // 3. Quota puis envoi Gmail
-    if (!(await takeQuota(window.date))) {
+    // 3. Quota puis envoi Gmail (les envois test ne consomment pas le quota)
+    if (!isTestSend && !(await takeQuota(window.date))) {
       return res.status(429).json({ error: `Plafond de ${DAILY_CAP} emails atteint aujourd'hui` })
     }
     let sent
@@ -139,12 +178,15 @@ export default async function handler(req, res) {
         html: buildHtmlBody(email.body, origin, to, audience),
       })
     } catch (err) {
-      await releaseQuota(window.date)
+      if (!isTestSend) await releaseQuota(window.date)
       throw err
     }
 
     // 4. Registre SCOUT, puis journalisation HubSpot (un échec n'annule pas l'envoi)
     const now = Date.now()
+    const effectiveCampaignId = campaignId?.trim()
+      ? (isTestSend ? `${campaignId.trim()}-TEST` : campaignId.trim())
+      : null
     const record = {
       email: to,
       targetId: target.id,
@@ -162,17 +204,18 @@ export default async function handler(req, res) {
       dealId: dealId ? String(dealId) : null,
       contactId: hsContact.id,
       companyId: company.id ?? null,
-      campaignId: campaignId?.trim() ?? null,
+      campaignId: effectiveCampaignId,
       segment: target.segment ?? null,
+      ...(isTestSend ? { test: true } : {}),
       hubspotLogs: {
         [sent.id]: { kind: 'initial', subject: email.subject, body: email.body, timestamp: now, origin, state: 'queued' },
       },
       followUp: followUpMail ? { ...followUpMail, dueAt: now + FOLLOW_UP_DAYS * DAY_MS } : null,
     }
+    // Les envois test ne s'écrivent pas dans le pipeline SCOUT
     await redis([
       ['HSET', SENDS_KEY, to, JSON.stringify(record)],
-      // Le suivi « Campagne » de SCOUT ne concerne que les intermédiaires
-      ...(audience === DEFAULT_AUDIENCE ? [['HSETNX', PIPELINE_KEY, target.id, JSON.stringify('Contacté')]] : []),
+      ...(!isTestSend && audience === DEFAULT_AUDIENCE ? [['HSETNX', PIPELINE_KEY, target.id, JSON.stringify('Contacté')]] : []),
     ])
 
     try {
@@ -182,12 +225,11 @@ export default async function handler(req, res) {
       console.warn(`[SCOUT] Email envoyé à ${to} ; journalisation HubSpot à reprendre : ${err.message}`)
     }
 
-    // Propriétés de campagne SCOUT sur le contact HubSpot (best-effort)
-    if (campaignId?.trim()) {
-      const cid = campaignId.trim()
-      writeCampaignProps(hsContact.id, { campaignId: cid, segment: target.segment, statut: 'envoye', etapeSequence: 1 })
+    // Propriétés de campagne SCOUT sur le contact HubSpot (best-effort, pas pour les tests)
+    if (effectiveCampaignId && !isTestSend) {
+      writeCampaignProps(hsContact.id, { campaignId: effectiveCampaignId, segment: target.segment, statut: 'envoye', etapeSequence: 1 })
         .catch((err) => console.warn(`[SCOUT] writeCampaignProps ${to} : ${err.message}`))
-      appendCampaignHistory(hsContact.id, cid)
+      appendCampaignHistory(hsContact.id, effectiveCampaignId)
         .catch((err) => console.warn(`[SCOUT] appendCampaignHistory ${to} : ${err.message}`))
     }
 
