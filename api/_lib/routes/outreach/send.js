@@ -141,6 +141,11 @@ export default async function handler(req, res) {
     if (!account) account = await gmailAccount()
     if (!account) return res.status(409).json({ error: 'Gmail non connecté', code: 'GMAIL_DISCONNECTED' })
 
+    // Calculé ici (avant l'upsert) pour éviter la temporal dead zone JavaScript
+    const effectiveCampaignId = campaignId?.trim()
+      ? (isTestSend ? `${campaignId.trim()}-TEST` : campaignId.trim())
+      : null
+
     // 1. HubSpot (clé SCOUT) : société (search-first) + contact upsert avec props scout_*
     const company = await upsertCompany({
       name: target.name, domain: target.domain, canton: target.canton, uid: target.uid, segment: target.segment,
@@ -162,17 +167,20 @@ export default async function handler(req, res) {
     if (!hsContact.id) return res.status(502).json({ error: `Contact HubSpot non créé : ${hsContact.data?.message ?? 'erreur'}` })
     if (company.id) await associateContactToCompany(hsContact.id, company.id)
 
-    // 2. Statut d'abonnement (token COMMS) — fail-closed
-    let subscription
-    try {
-      subscription = await checkSubscription(to, audience)
-    } catch (err) {
-      console.warn(`[SCOUT] Envoi annulé pour ${to} : ${err.message}`)
-      return res.status(503).json({ error: `Envoi annulé : statut d'abonnement HubSpot indisponible (${err.message})`, code: 'SUBSCRIPTION_CHECK_FAILED' })
-    }
-    if (subscription.unsubscribed) {
-      console.info(`[SCOUT] Envoi annulé : ${to} est désinscrit dans HubSpot (${subscription.unsubscribedFromAll ? 'toutes communications' : AUDIENCES[audience]})`)
-      return res.status(409).json({ error: `${to} est désinscrit dans HubSpot`, code: 'UNSUBSCRIBED' })
+    // 2. Statut d'abonnement (token COMMS) — fail-closed ; bypassé pour les envois test
+    //    (l'adresse test n'est pas dans HubSpot comms et n'a pas à l'être)
+    if (!isTestSend) {
+      let subscription
+      try {
+        subscription = await checkSubscription(to, audience)
+      } catch (err) {
+        console.warn(`[SCOUT] Envoi annulé pour ${to} : ${err.message}`)
+        return res.status(503).json({ error: `Envoi annulé : statut d'abonnement HubSpot indisponible (${err.message})`, code: 'SUBSCRIPTION_CHECK_FAILED' })
+      }
+      if (subscription.unsubscribed) {
+        console.info(`[SCOUT] Envoi annulé : ${to} est désinscrit dans HubSpot (${subscription.unsubscribedFromAll ? 'toutes communications' : AUDIENCES[audience]})`)
+        return res.status(409).json({ error: `${to} est désinscrit dans HubSpot`, code: 'UNSUBSCRIBED' })
+      }
     }
 
     // 3. Quota puis envoi Gmail (les envois test ne consomment pas le quota)
@@ -195,9 +203,6 @@ export default async function handler(req, res) {
 
     // 4. Registre SCOUT, puis journalisation HubSpot (un échec n'annule pas l'envoi)
     const now = Date.now()
-    const effectiveCampaignId = campaignId?.trim()
-      ? (isTestSend ? `${campaignId.trim()}-TEST` : campaignId.trim())
-      : null
     const record = {
       email: to,
       targetId: target.id,

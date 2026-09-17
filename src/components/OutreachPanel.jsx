@@ -413,7 +413,12 @@ export default function OutreachPanel({ onNavigate }) {
     .sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0)),
   [targets, pipeline, segFilter, statusFilter])
 
-  const recordFor = (t) => (t.contact?.email ? sends[t.contact.email.trim().toLowerCase()] ?? null : null)
+  // Les envois test (record.test === true) n'affectent pas le statut ni les KPIs
+  const recordFor = (t) => {
+    if (!t.contact?.email) return null
+    const r = sends[t.contact.email.trim().toLowerCase()] ?? null
+    return r?.test ? null : r
+  }
   // Mode test : simulation possible sans Gmail ; mode réel : Gmail connecté + module communications actif
   const gmailReady = gmail.dryRun
     ? ['connected', 'disconnected', 'unconfigured'].includes(gmail.state)
@@ -701,18 +706,24 @@ export default function OutreachPanel({ onNavigate }) {
     const c = { ...t.contact, email: testEmail }
     if (!window.confirm(`Envoyer un email TEST à ${testEmail} ?\n\nL'email partira depuis ${gmail.email ?? 'Gmail'} — hors créneau autorisé.`)) return
     setSend((s) => ({ ...s, [t.id]: 'loading' }))
-    const { ok, status, data } = await secureFetch('/api/outreach/send', {
-      method: 'POST',
-      body: {
-        target: { id: t.id, name: t.name, domain: t.domain, canton: t.canton, uid: t.uid, segment: t.segment },
-        contact: c,
-        email,
-        followUp: followUpMail,
-        senderName: sender.name,
-        objective: settings.objective,
-        campaignId: settings.campaignId?.trim() || undefined,
-      },
-    })
+    let ok, status, data
+    try {
+      ;({ ok, status, data } = await secureFetch('/api/outreach/send', {
+        method: 'POST',
+        body: {
+          target: { id: t.id, name: t.name, domain: t.domain, canton: t.canton, uid: t.uid, segment: t.segment },
+          contact: c,
+          email,
+          followUp: followUpMail,
+          senderName: sender.name,
+          objective: settings.objective,
+          campaignId: settings.campaignId?.trim() || undefined,
+        },
+      }))
+    } catch (err) {
+      setSend((s) => ({ ...s, [t.id]: err.message ?? 'Erreur réseau' }))
+      return
+    }
     if (!ok) {
       setSend((s) => ({ ...s, [t.id]: data.error ?? `Erreur ${status}` }))
       if (status === 401) setGmail({ state: 'locked', error: "Code d'accès incorrect" })
