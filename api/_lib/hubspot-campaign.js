@@ -36,9 +36,13 @@ function scoutKey() {
 
 const request = (path, options) => hubspotRequest(scoutKey(), path, options)
 
-// Minuit UTC au format YYYY-MM-DD (le portail est en Europe/Zurich, les dates
-// sont stockées à minuit UTC : ne jamais envoyer un horodatage local)
-const todayUTC = () => new Date().toISOString().slice(0, 10)
+// Minuit UTC en millisecondes — HubSpot exige un epoch ms pour les champs de type date.
+// Pour les champs texte (scout_campagnes_historique), utiliser toISOString().slice(0,10).
+const todayUTC = () => {
+  const d = new Date()
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+}
+const todayLabel = () => new Date().toISOString().slice(0, 10)
 
 // ─── Écriture des propriétés de campagne sur un contact (par ID HubSpot) ─────
 // Appelé immédiatement après l'envoi réussi. Ne bloque pas l'envoi en cas
@@ -50,7 +54,7 @@ export async function writeCampaignProps(contactId, { campaignId, segment, statu
     scout_campagne: campaignId,
     scout_statut: statut ?? 'envoye',
     scout_date_dernier_envoi: todayUTC(),
-    scout_etape_sequence: String(etapeSequence ?? 1),
+    scout_etape_sequence: etapeSequence ?? 1,
     ...(hsSegment ? { scout_segment: hsSegment } : {}),
   }
   const r = await request(`/crm/v3/objects/contacts/${contactId}`, { method: 'PATCH', body: { properties } })
@@ -63,9 +67,10 @@ export async function writeCampaignProps(contactId, { campaignId, segment, statu
 // Format : YYYY-MM-DD — <identifiant de campagne>, une ligne par campagne.
 export async function appendCampaignHistory(contactId, campaignId) {
   if (!contactId || !campaignId) return false
-  const today = todayUTC()
+  const today = todayLabel()
   const entry = `${today} — ${campaignId}`
   const r = await request(`/crm/v3/objects/contacts/${contactId}?properties=scout_campagnes_historique`)
+  if (!r.ok) console.error(`[SCOUT] appendCampaignHistory GET contact ${contactId} : HTTP ${r.status} — ${JSON.stringify(r.data)}`)
   const existing = r.ok ? (r.data?.properties?.scout_campagnes_historique ?? '') : ''
   const lines = existing ? existing.split('\n').map((l) => l.trim()).filter(Boolean) : []
   if (lines.includes(entry)) return true // déjà enregistré
@@ -74,6 +79,7 @@ export async function appendCampaignHistory(contactId, campaignId) {
     method: 'PATCH',
     body: { properties: { scout_campagnes_historique: newValue } },
   })
+  if (!w.ok) console.error(`[SCOUT] appendCampaignHistory PATCH contact ${contactId} : HTTP ${w.status} — ${JSON.stringify(w.data)}`)
   return w.ok
 }
 
@@ -339,7 +345,7 @@ export async function batchUpsertCampaignContacts(inputs) {
               scout_campagne: campaignId,
               scout_statut: statut ?? 'envoye',
               scout_date_dernier_envoi: todayUTC(),
-              scout_etape_sequence: String(etapeSequence ?? 1),
+              scout_etape_sequence: etapeSequence ?? 1,
               ...(hsSegment ? { scout_segment: hsSegment } : {}),
             },
           }

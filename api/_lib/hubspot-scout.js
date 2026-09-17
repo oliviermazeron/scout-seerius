@@ -130,7 +130,10 @@ export async function upsertContact({ email, firstname, lastname, jobtitle, comp
     method: 'POST',
     body: { inputs: [{ idProperty: 'email', id: normalEmail, properties }] },
   })
-  if (!r.ok) throw new Error(`upsertContact: HTTP ${r.status} — ${r.data?.message ?? 'erreur'}`)
+  if (!r.ok) {
+    console.error(`[SCOUT] upsertContact HTTP ${r.status} email=${normalEmail} — ${JSON.stringify(r.data)}`)
+    throw new Error(`upsertContact: HTTP ${r.status} — ${r.data?.message ?? 'erreur'}`)
+  }
   const result = r.data?.results?.[0]
   return { action: result ? 'upserted' : 'error', id: result?.id ?? null, data: result }
 }

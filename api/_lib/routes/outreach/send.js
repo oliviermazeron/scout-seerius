@@ -141,10 +141,17 @@ export default async function handler(req, res) {
     if (!account) account = await gmailAccount()
     if (!account) return res.status(409).json({ error: 'Gmail non connecté', code: 'GMAIL_DISCONNECTED' })
 
-    // Calculé ici (avant l'upsert) pour éviter la temporal dead zone JavaScript
-    const effectiveCampaignId = campaignId?.trim()
-      ? (isTestSend ? `${campaignId.trim()}-TEST` : campaignId.trim())
-      : null
+    // Calculé ici (avant l'upsert) pour éviter la temporal dead zone JavaScript.
+    // Fallback serveur si le front n'a pas envoyé d'identifiant (champ vide au montage).
+    const resolvedCampaignId = (() => {
+      if (campaignId?.trim()) return campaignId.trim()
+      const now = new Date()
+      const yyyy = now.getUTCFullYear()
+      const mm = String(now.getUTCMonth() + 1).padStart(2, '0')
+      const seg = audience === DEFAULT_AUDIENCE ? 'INTERMEDIAIRES' : 'DIRIGEANTS'
+      return `SCOUT-${yyyy}-${mm}-${seg}-V1`
+    })()
+    const effectiveCampaignId = isTestSend ? `${resolvedCampaignId}-TEST` : resolvedCampaignId
 
     // 1. HubSpot (clé SCOUT) : société (search-first) + contact upsert avec props scout_*
     const company = await upsertCompany({
@@ -156,8 +163,9 @@ export default async function handler(req, res) {
       lastname:  contact.lastName ?? '',
       jobtitle:  contact.role ?? '',
       company:   target.name,
-      // Propriétés scout_* incluses dans l'upsert si campagne active (un seul appel)
-      ...(effectiveCampaignId ? {
+      // Propriétés scout_* incluses dans l'upsert si campagne active et envoi réel (un seul appel).
+      // Les envois test n'écrivent pas de données CRM (adresse test ≠ prospect réel).
+      ...(!isTestSend && effectiveCampaignId ? {
         campaignId: effectiveCampaignId,
         segment:    target.segment,
         statut:     'envoye',
@@ -242,10 +250,15 @@ export default async function handler(req, res) {
       console.warn(`[SCOUT] Email envoyé à ${to} ; journalisation HubSpot à reprendre : ${err.message}`)
     }
 
-    // Historique de campagne (append read-then-write, toujours séparé de l'upsert)
-    if (effectiveCampaignId) {
-      appendCampaignHistory(hsContact.id, effectiveCampaignId)
-        .catch((err) => console.warn(`[SCOUT] appendCampaignHistory ${to} : ${err.message}`))
+    // Historique de campagne (append read-then-write, toujours séparé de l'upsert).
+    // Awaité explicitement : Vercel gèle la sandbox dès le return, une promesse flottante ne part jamais.
+    // Pas pour les envois test (option A : HubSpot ne voit pas les contacts test).
+    if (!isTestSend && effectiveCampaignId) {
+      try {
+        await appendCampaignHistory(hsContact.id, effectiveCampaignId)
+      } catch (err) {
+        console.error(`[SCOUT] appendCampaignHistory ${to} : ${err.message}`)
+      }
     }
 
     // Affaire « Deal sourcing » → « Contactée » (un échec n'annule pas l'envoi)

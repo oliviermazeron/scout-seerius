@@ -90,7 +90,7 @@ export function readSettings() {
   const s = readJSON(SETTINGS_KEY, {})
   return {
     objective: OBJECTIVES[s.objective] ? s.objective : DEFAULT_SETTINGS.objective,
-    campaignId: s.campaignId ?? DEFAULT_SETTINGS.campaignId,
+    campaignId: s.campaignId?.trim() || generateCampaignId('INTERMEDIAIRES'),
     criteria: { ...DEFAULT_SETTINGS.criteria, ...(s.criteria ?? {}) },
   }
 }
