@@ -7,6 +7,16 @@
 // (voir hubspot-comms.js).
 
 import { hubspotRequest } from './hubspot-http.js'
+import { redisOne } from './redis.js'
+
+const HS_LEAD_STATUS_MAP = {
+  a_contacter: 'NEW',
+  envoye:      'ATTEMPTED_TO_CONTACT',
+  relance:     'ATTEMPTED_TO_CONTACT',
+  repondu:     'CONNECTED',
+  rdv_obtenu:  'OPEN_DEAL',
+  exclu:       'UNQUALIFIED',
+}
 
 const SEGMENT_MAP = {
   banque_cantonale: "Banque cantonale",
@@ -109,15 +119,17 @@ export async function upsertCompany({ name, domain, canton, uid, segment }) {
 // Les propriétés scout_* sont incluses directement si campaignId est fourni,
 // évitant un PATCH séparé. scout_campagnes_historique reste en append séparé.
 export async function upsertContact({ email, firstname, lastname, jobtitle, company,
-  campaignId, segment, statut, etapeSequence }) {
+  campaignId, segment, statut, etapeSequence, ownerId }) {
   const normalEmail = email.toLowerCase().trim()
   const hsSegment = campaignId && segment ? SCOUT_SEGMENT_MAP[segment] : undefined
+  const hsLeadStatus = statut ? HS_LEAD_STATUS_MAP[statut] : undefined
   const properties = {
     email: normalEmail,
-    ...(firstname ? { firstname } : {}),
-    ...(lastname  ? { lastname  } : {}),
-    ...(jobtitle  ? { jobtitle  } : {}),
-    ...(company   ? { company   } : {}),
+    ...(firstname     ? { firstname }                       : {}),
+    ...(lastname      ? { lastname  }                       : {}),
+    ...(jobtitle      ? { jobtitle  }                       : {}),
+    ...(company       ? { company   }                       : {}),
+    ...(hsLeadStatus  ? { hs_lead_status: hsLeadStatus }    : {}),
     ...(campaignId ? {
       scout_campagne:           campaignId,
       scout_statut:             statut ?? 'envoye',
@@ -135,7 +147,25 @@ export async function upsertContact({ email, firstname, lastname, jobtitle, comp
     throw new Error(`upsertContact: HTTP ${r.status} — ${r.data?.message ?? 'erreur'}`)
   }
   const result = r.data?.results?.[0]
-  return { action: result ? 'upserted' : 'error', id: result?.id ?? null, data: result }
+  const contactId = result?.id ?? null
+
+  // Attribuer le propriétaire seulement si la fiche n'en a pas déjà un —
+  // évite d'écraser un propriétaire posé manuellement entre deux campagnes.
+  if (contactId && ownerId) {
+    try {
+      const g = await request(`/crm/v3/objects/contacts/${contactId}?properties=hubspot_owner_id`)
+      if (g.ok && !g.data?.properties?.hubspot_owner_id) {
+        await request(`/crm/v3/objects/contacts/${contactId}`, {
+          method: 'PATCH',
+          body: { properties: { hubspot_owner_id: String(ownerId) } },
+        })
+      }
+    } catch (err) {
+      console.warn(`[SCOUT] hubspot_owner_id non posé sur ${normalEmail} : ${err.message}`)
+    }
+  }
+
+  return { action: result ? 'upserted' : 'error', id: contactId, data: result }
 }
 
 export async function associateContactToCompany(contactId, companyId) {
@@ -316,6 +346,31 @@ export async function taskOwnerId() {
   if (!owner) throw Object.assign(new Error(`Propriétaire HubSpot introuvable pour ${email}`), { code: 'OWNER_NOT_FOUND' })
   taskOwnerIdCache = owner.id
   return taskOwnerIdCache
+}
+
+// Résout l'ownerId HubSpot depuis l'adresse Gmail de l'expéditeur.
+// Mis en cache dans Redis (TTL 4h) : l'ownerId ne change pas entre deux envois.
+// En cas d'échec : console.warn + retourne null (l'envoi continue sans propriétaire).
+export async function resolveOwnerId(gmailEmail) {
+  if (!gmailEmail) return null
+  const email = gmailEmail.toLowerCase().trim()
+  const cacheKey = `scout:owner:${email}`
+  try {
+    const cached = await redisOne('GET', cacheKey)
+    if (cached) return cached
+  } catch {}
+  const r = await request(`/crm/v3/owners?email=${encodeURIComponent(email)}&limit=1`)
+  if (!r.ok) {
+    console.warn(`[SCOUT] resolveOwnerId ${email} : HTTP ${r.status} — ${JSON.stringify(r.data)}`)
+    return null
+  }
+  const owner = (r.data.results ?? []).find((o) => String(o.email ?? '').toLowerCase() === email && !o.archived)
+  if (!owner) {
+    console.warn(`[SCOUT] resolveOwnerId : aucun owner HubSpot pour ${email}`)
+    return null
+  }
+  try { await redisOne('SET', cacheKey, String(owner.id), 'EX', 4 * 3600) } catch {}
+  return String(owner.id)
 }
 
 // Le corps de tâche HubSpot est du HTML : un seul chemin de formatage pour tous les gabarits

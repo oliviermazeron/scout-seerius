@@ -23,7 +23,7 @@
 import { setCors, requireAccess, publicOrigin, sendingWindow } from '../../access.js'
 import { configStatus, reportConfig, isDryRun, logDryRun } from '../../config.js'
 import { googleConfig, gmailAccount, sendGmail } from '../../google.js'
-import { upsertCompany, upsertContact, associateContactToCompany, moveDealToStage } from '../../hubspot-scout.js'
+import { upsertCompany, upsertContact, associateContactToCompany, moveDealToStage, resolveOwnerId } from '../../hubspot-scout.js'
 import { checkSubscription, isAudience, AUDIENCES, DEFAULT_AUDIENCE } from '../../hubspot-comms.js'
 import { appendCampaignHistory } from '../../hubspot-campaign.js'
 import { emailProblems } from '../../../../src/services/emailGuard.js'
@@ -154,6 +154,7 @@ export default async function handler(req, res) {
     const effectiveCampaignId = isTestSend ? `${resolvedCampaignId}-TEST` : resolvedCampaignId
 
     // 1. HubSpot (clé SCOUT) : société (search-first) + contact upsert avec props scout_*
+    const ownerId = await resolveOwnerId(account?.email ?? null).catch(() => null)
     const company = await upsertCompany({
       name: target.name, domain: target.domain, canton: target.canton, uid: target.uid, segment: target.segment,
     })
@@ -171,6 +172,7 @@ export default async function handler(req, res) {
         statut:     'envoye',
         etapeSequence: 1,
       } : {}),
+      ...(!isTestSend ? { ownerId } : {}),
     })
     if (!hsContact.id) return res.status(502).json({ error: `Contact HubSpot non créé : ${hsContact.data?.message ?? 'erreur'}` })
     console.info(`[SCOUT] Contact HubSpot ${hsContact.action} id=${hsContact.id} email=${to}`)
