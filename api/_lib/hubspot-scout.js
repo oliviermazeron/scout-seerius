@@ -37,8 +37,11 @@ const SHARED_DOMAINS = new Set([
   'yahoo.fr', 'yahoo.com', 'icloud.com', 'me.com',
 ])
 
-// Minuit UTC au format YYYY-MM-DD (HubSpot stocke les dates date à minuit UTC)
-const todayUTC = () => new Date().toISOString().slice(0, 10)
+// Minuit UTC en millisecondes — HubSpot exige un epoch ms pour les champs de type date
+const todayUTC = () => {
+  const d = new Date()
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+}
 
 export const scoutKeyConfigured = () => !!(process.env.HUBSPOT_SCOUT_KEY || process.env.HUBSPOT_TOKEN)
 
@@ -119,7 +122,7 @@ export async function upsertContact({ email, firstname, lastname, jobtitle, comp
       scout_campagne:           campaignId,
       scout_statut:             statut ?? 'envoye',
       scout_date_dernier_envoi: todayUTC(),
-      scout_etape_sequence:     String(etapeSequence ?? 1),
+      scout_etape_sequence:     etapeSequence ?? 1,
       ...(hsSegment ? { scout_segment: hsSegment } : {}),
     } : {}),
   }

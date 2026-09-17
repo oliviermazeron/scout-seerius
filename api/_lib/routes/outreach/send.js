@@ -157,7 +157,7 @@ export default async function handler(req, res) {
       jobtitle:  contact.role ?? '',
       company:   target.name,
       // Propriétés scout_* incluses dans l'upsert si campagne active (un seul appel)
-      ...(effectiveCampaignId && !isTestSend ? {
+      ...(effectiveCampaignId ? {
         campaignId: effectiveCampaignId,
         segment:    target.segment,
         statut:     'envoye',
@@ -165,6 +165,7 @@ export default async function handler(req, res) {
       } : {}),
     })
     if (!hsContact.id) return res.status(502).json({ error: `Contact HubSpot non créé : ${hsContact.data?.message ?? 'erreur'}` })
+    console.info(`[SCOUT] Contact HubSpot ${hsContact.action} id=${hsContact.id} email=${to}`)
     if (company.id) await associateContactToCompany(hsContact.id, company.id)
 
     // 2. Statut d'abonnement (token COMMS) — fail-closed ; bypassé pour les envois test
@@ -242,7 +243,7 @@ export default async function handler(req, res) {
     }
 
     // Historique de campagne (append read-then-write, toujours séparé de l'upsert)
-    if (effectiveCampaignId && !isTestSend) {
+    if (effectiveCampaignId) {
       appendCampaignHistory(hsContact.id, effectiveCampaignId)
         .catch((err) => console.warn(`[SCOUT] appendCampaignHistory ${to} : ${err.message}`))
     }
