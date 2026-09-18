@@ -396,6 +396,13 @@ export default function ContactTable({ companies, segment, onNavigate }) {
   const [filterForm,      setFilterForm]      = useState('')
   const [filterStatus,    setFilterStatus]    = useState('')
   const [sortKey,         setSortKey]         = useState('score') // score | name
+  const [filterRelation,  setFilterRelation]  = useState(() => {
+    try { return localStorage.getItem(`scout_view_filter_relation_${segment}`) ?? '' } catch { return '' }
+  })
+  const handleFilterRelation = useCallback((val) => {
+    setFilterRelation(val)
+    try { localStorage.setItem(`scout_view_filter_relation_${segment}`, val) } catch {}
+  }, [segment])
 
   // Persistance localStorage
   const [zefixData, setZefixData] = useState(() => {
@@ -455,6 +462,20 @@ export default function ContactTable({ companies, segment, onNavigate }) {
     return [...forms].sort()
   }, [companies])
 
+  // Historique des envois (email envoyé via OutreachPanel) — domaines/emails contactés
+  const sendDomains = useMemo(() => {
+    try {
+      const sends = JSON.parse(localStorage.getItem('scout_outreach_sends') ?? '{}')
+      const domains = new Set()
+      const emails  = new Set()
+      Object.values(sends).forEach((r) => {
+        if (r?.email) emails.add(String(r.email).toLowerCase())
+        if (r?.targetId) domains.add(String(r.targetId).toLowerCase())
+      })
+      return { domains, emails }
+    } catch { return { domains: new Set(), emails: new Set() } }
+  }, []) // calculé une fois par montage (les envois ne changent pas en cours de vue)
+
   // ── Filtrage + tri ────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let list = companies.map((c) => {
@@ -468,11 +489,24 @@ export default function ContactTable({ companies, segment, onNavigate }) {
     if (filterForm)   list = list.filter((c) => (c._zefix.legalForm ?? c.legalForm) === filterForm)
     if (filterStatus) list = list.filter((c) => c.status === filterStatus)
 
+    if (filterRelation) {
+      list = list.filter((c) => {
+        const rel = statutData[`${segment}:${c._key}`] ?? '—'
+        // Une société est aussi "contactée" si un de ses emails/domaines figure dans les envois
+        const sentByMail = sendDomains.domains.has(String(c._key).toLowerCase()) ||
+          (c._domain && sendDomains.domains.has(String(c._domain).toLowerCase()))
+        const isContacted = rel !== '—' || sentByMail
+        if (filterRelation === 'non_contactes') return !isContacted
+        if (filterRelation === 'masquer_contactes') return !isContacted
+        return rel === filterRelation
+      })
+    }
+
     if (sortKey === 'score') list = [...list].sort((a, b) => b._score - a._score)
     else list = [...list].sort((a, b) => a.name.localeCompare(b.name, 'fr'))
 
     return list
-  }, [companies, filterName, filterForm, filterStatus, sortKey, foundDomains, zefixData])
+  }, [companies, filterName, filterForm, filterStatus, filterRelation, sortKey, foundDomains, zefixData, statutData, sendDomains, segment])
 
   function toggleSelect(uid) {
     setSelected((prev) => { const n = new Set(prev); n.has(uid) ? n.delete(uid) : n.add(uid); return n })
@@ -722,12 +756,20 @@ export default function ContactTable({ companies, segment, onNavigate }) {
           <option value="active">Actif</option>
           <option value="radié">Radié</option>
         </select>
+        <select className="filter-select" value={filterRelation} onChange={(e) => handleFilterRelation(e.target.value)}>
+          <option value="">Toutes relations</option>
+          <option value="masquer_contactes">Masquer contactés</option>
+          <option value="non_contactes">Non contactés uniquement</option>
+          <option value="Contacté">Contacté</option>
+          <option value="RDV">RDV</option>
+          <option value="Partenaire">Partenaire</option>
+        </select>
         <select className="filter-select" value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
           <option value="score">Tri : Score ↓</option>
           <option value="name">Tri : Nom A→Z</option>
         </select>
-        {(filterName || filterForm || filterStatus) && (
-          <button className="btn-clear-filters" onClick={() => { setFilterName(''); setFilterForm(''); setFilterStatus('') }}>
+        {(filterName || filterForm || filterStatus || filterRelation) && (
+          <button className="btn-clear-filters" onClick={() => { setFilterName(''); setFilterForm(''); setFilterStatus(''); handleFilterRelation('') }}>
             ✕ Réinitialiser
           </button>
         )}
