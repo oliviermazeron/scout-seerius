@@ -6,7 +6,8 @@ import { redisOne } from './redis.js'
 
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/gmail.readonly',
+  // gmail.modify ⊃ gmail.readonly : lit, modifie les labels, applique SCOUT
+  'https://www.googleapis.com/auth/gmail.modify',
 ]
 const ACCOUNT_KEY = 'secret:gmail'
 
@@ -93,6 +94,45 @@ export async function disconnectGmail() {
   await redisOne('DEL', ACCOUNT_KEY)
 }
 
+// ─── Label Gmail « SCOUT » ────────────────────────────────────────────────────
+// Créé automatiquement si absent. ID mis en cache Redis 24 h.
+const LABEL_CACHE_KEY = 'secret:gmail_label_scout'
+
+export async function ensureScoutLabel() {
+  const cached = await redisOne('GET', LABEL_CACHE_KEY).catch(() => null)
+  if (cached) return cached
+
+  const list = await gmailApi('/labels').catch(() => ({ labels: [] }))
+  const existing = (list.labels ?? []).find((l) => l.name === 'SCOUT')
+  if (existing) {
+    await redisOne('SET', LABEL_CACHE_KEY, existing.id, 'EX', 86400).catch(() => {})
+    return existing.id
+  }
+  const created = await gmailApi('/labels', {
+    method: 'POST',
+    body: { name: 'SCOUT', labelListVisibility: 'labelShow', messageListVisibility: 'show' },
+  }).catch(() => null)
+  if (!created?.id) return null
+  await redisOne('SET', LABEL_CACHE_KEY, created.id, 'EX', 86400).catch(() => {})
+  return created.id
+}
+
+// Applique le label SCOUT à un message — best-effort, ne bloque jamais l'envoi.
+// Requiert le scope gmail.modify (ajouté ci-dessus) ; si le token actuel n'a pas
+// encore ce scope (avant re-auth), l'erreur est silencieuse.
+export async function applyScoutLabel(gmailMessageId) {
+  try {
+    const labelId = await ensureScoutLabel()
+    if (!labelId) return
+    await gmailApi(`/messages/${gmailMessageId}/modify`, {
+      method: 'POST',
+      body: { addLabelIds: [labelId] },
+    })
+  } catch (err) {
+    console.warn(`[SCOUT] label SCOUT non appliqué sur ${gmailMessageId} : ${err.message}`)
+  }
+}
+
 // ─── Envoi ────────────────────────────────────────────────────────────────────
 const oneLine = (s) => String(s ?? '').replace(/[\r\n]+/g, ' ').trim()
 
@@ -177,13 +217,29 @@ export async function sendGmail({ fromName, to, subject, text, html, threadId, i
 }
 
 // Messages du fil qui ne viennent pas de nous (réponses, rejets)
+// Retourne aussi messageId (pour le dédoublonnage) et les en-têtes de détection
+// des réponses automatiques (Auto-Submitted, X-Autoreply, X-Auto-Response-Suppress).
 export async function threadReplies(threadId) {
-  const thread = await gmailApi(`/threads/${threadId}?format=metadata&metadataHeaders=From`)
+  const thread = await gmailApi(
+    `/threads/${threadId}?format=metadata&metadataHeaders=From,Message-ID,Auto-Submitted,X-Autoreply,X-Auto-Response-Suppress`,
+  )
   return (thread.messages ?? [])
     .filter((m) => !(m.labelIds ?? []).includes('SENT'))
-    .map((m) => ({
-      from: m.payload?.headers?.find((h) => h.name.toLowerCase() === 'from')?.value ?? '',
-      snippet: m.snippet ?? '',
-      date: Number(m.internalDate),
-    }))
+    .map((m) => {
+      const hdrs = m.payload?.headers ?? []
+      const h = (name) => hdrs.find((x) => x.name.toLowerCase() === name.toLowerCase())?.value ?? ''
+      const autoSubmitted = h('Auto-Submitted')
+      const xAutoreply   = h('X-Autoreply')
+      const xAutoSuppress = h('X-Auto-Response-Suppress')
+      const isAutoReply  = /auto-(replied|generated|responded)/i.test(autoSubmitted) ||
+        xAutoreply === 'yes' || /OOF|AutoReply/i.test(xAutoSuppress)
+      return {
+        id:          m.id ?? '',
+        messageId:   h('Message-ID'),
+        from:        h('From'),
+        snippet:     m.snippet ?? '',
+        date:        Number(m.internalDate),
+        isAutoReply,
+      }
+    })
 }

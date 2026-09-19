@@ -23,7 +23,8 @@
 import { setCors, requireAccess, publicOrigin, sendingWindow } from '../../access.js'
 import { configStatus, reportConfig, isDryRun, logDryRun } from '../../config.js'
 import { googleConfig, gmailAccount, sendGmail } from '../../google.js'
-import { upsertCompany, upsertContact, associateContactToCompany, moveDealToStage, resolveOwnerId } from '../../hubspot-scout.js'
+import { upsertCompany, upsertContact, associateContactToCompany, moveDealToStage, resolveOwnerId, updateContactTracking } from '../../hubspot-scout.js'
+import { applyScoutLabel } from '../../google.js'
 import { checkSubscription, isAudience, AUDIENCES, DEFAULT_AUDIENCE } from '../../hubspot-comms.js'
 import { appendCampaignHistory } from '../../hubspot-campaign.js'
 import { emailProblems } from '../../../../src/services/emailGuard.js'
@@ -198,6 +199,7 @@ export default async function handler(req, res) {
     if (!isTestSend && !(await takeQuota(window.date))) {
       return res.status(429).json({ error: `Plafond de ${DAILY_CAP} emails atteint aujourd'hui` })
     }
+    const sendAt = Date.now()
     let sent
     try {
       sent = await sendGmail({
@@ -205,11 +207,19 @@ export default async function handler(req, res) {
         to,
         subject: email.subject,
         text: withUnsubscribe(email.body, origin, to, audience),
-        html: buildHtmlBody(email.body, origin, to, audience),
+        html: buildHtmlBody(email.body, origin, to, audience, { sentAt: sendAt }),
       })
     } catch (err) {
       if (!isTestSend) await releaseQuota(window.date)
       throw err
+    }
+
+    // Label SCOUT sur le message Gmail — best-effort, n'annule pas l'envoi
+    if (!isTestSend) applyScoutLabel(sent.id).catch(() => {})
+
+    // Propriété scout_last_email_sent — best-effort, silencieuse si prop absente
+    if (!isTestSend && hsContact.id) {
+      updateContactTracking(hsContact.id, { scout_last_email_sent: sendAt }).catch(() => {})
     }
 
     // 4. Registre SCOUT, puis journalisation HubSpot (un échec n'annule pas l'envoi)
@@ -235,7 +245,7 @@ export default async function handler(req, res) {
       segment: target.segment ?? null,
       ...(isTestSend ? { test: true } : {}),
       hubspotLogs: {
-        [sent.id]: { kind: 'initial', subject: email.subject, body: email.body, timestamp: now, origin, state: 'queued' },
+        [sent.id]: { kind: 'initial', subject: email.subject, body: email.body, timestamp: sendAt, origin, state: 'queued' },
       },
       followUp: followUpMail ? { ...followUpMail, dueAt: now + FOLLOW_UP_DAYS * DAY_MS } : null,
     }

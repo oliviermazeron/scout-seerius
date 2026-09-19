@@ -193,21 +193,30 @@ async function emailToContactType() {
 // hs_email_headers (JSON sérialisé from / to).
 // → { ok: true, id } | { ok: false, error } ; lève err.uncertain si HubSpot n'a
 //   pas répondu (l'email a peut-être été créé : ne pas rejouer automatiquement).
-export function emailPayload({ contactId, subject, text, html, from, to, timestamp, associationTypeId }) {
+export function emailPayload({ contactId, companyId, subject, text, html, from, to, timestamp,
+  associationTypeId, direction = 'EMAIL', status = 'SENT' }) {
+  const associations = [{
+    to: { id: String(contactId) },
+    types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId }],
+  }]
+  // typeId 186 (email→company) — confirmé live 2026-09
+  if (companyId) {
+    associations.push({
+      to: { id: String(companyId) },
+      types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 186 }],
+    })
+  }
   return {
     properties: {
       hs_timestamp: timestamp,
-      hs_email_direction: 'EMAIL',
-      hs_email_status: 'SENT',
+      hs_email_direction: direction,
+      hs_email_status: status,
       hs_email_subject: subject,
       hs_email_text: text,
       ...(html ? { hs_email_html: html } : {}),
       hs_email_headers: JSON.stringify({ from: { email: from }, to: [{ email: to }], cc: [], bcc: [] }),
     },
-    associations: [{
-      to: { id: String(contactId) },
-      types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId }],
-    }],
+    associations,
   }
 }
 
@@ -432,4 +441,79 @@ export async function logEmail(email) {
   const associationTypeId = await emailToContactType()
   const r = await request('/crm/v3/objects/emails', { method: 'POST', body: emailPayload({ ...email, associationTypeId }) })
   return r.ok ? { ok: true, id: r.data.id } : { ok: false, error: r.data.message ?? `HTTP ${r.status}` }
+}
+
+// Consigne un email entrant (réponse du prospect) sur la fiche HubSpot.
+export async function logIncomingEmail({ contactId, companyId, subject, from, to, snippet, timestamp }) {
+  const associationTypeId = await emailToContactType()
+  const r = await request('/crm/v3/objects/emails', {
+    method: 'POST',
+    body: emailPayload({
+      contactId, companyId,
+      subject: subject || '(Re : sans objet)',
+      text: snippet || '',
+      from, to,
+      timestamp: timestamp || Date.now(),
+      associationTypeId,
+      direction: 'INCOMING_EMAIL',
+      status: 'SENT',
+    }),
+  })
+  return r.ok ? { ok: true, id: r.data.id } : { ok: false, error: r.data.message ?? `HTTP ${r.status}` }
+}
+
+// Met à jour les propriétés de tracking SCOUT sur un contact.
+// Silencieux si les propriétés n'existent pas encore (scope crm.schemas manquant).
+export async function updateContactTracking(contactId, props) {
+  if (!contactId || !Object.keys(props).length) return
+  const r = await request(`/crm/v3/objects/contacts/${contactId}`, {
+    method: 'PATCH',
+    body: { properties: props },
+  })
+  if (!r.ok) console.warn(`[SCOUT] updateContactTracking ${contactId} : HTTP ${r.status} — ${JSON.stringify(r.data?.message ?? r.data)}`)
+  return r.ok
+}
+
+// ─── Création des propriétés de tracking SCOUT ───────────────────────────────
+// Nécessite le scope crm.schemas.contacts.write sur la clé privée.
+// À appeler une seule fois via GET /api/outreach/setup-tracking-props.
+export async function createTrackingProperties() {
+  const GROUP = 'scout_tracking'
+  const props = [
+    { name: 'scout_last_email_sent',  label: 'SCOUT — Dernier envoi',          type: 'datetime', fieldType: 'date' },
+    { name: 'scout_first_open',       label: 'SCOUT — Première ouverture',      type: 'datetime', fieldType: 'date' },
+    { name: 'scout_last_open',        label: 'SCOUT — Dernière ouverture',      type: 'datetime', fieldType: 'date' },
+    { name: 'scout_open_count',       label: 'SCOUT — Nombre ouvertures',       type: 'number',   fieldType: 'number' },
+    { name: 'scout_last_click',       label: 'SCOUT — Dernier clic',            type: 'datetime', fieldType: 'date' },
+    { name: 'scout_last_click_url',   label: 'SCOUT — URL dernier clic',        type: 'string',   fieldType: 'text' },
+    { name: 'scout_replied',          label: 'SCOUT — A répondu',               type: 'bool',     fieldType: 'booleancheckbox' },
+    { name: 'scout_reply_date',       label: 'SCOUT — Date réponse',            type: 'datetime', fieldType: 'date' },
+    { name: 'scout_status',           label: 'SCOUT — Statut suivi',            type: 'enumeration', fieldType: 'select',
+      options: [
+        { label: 'Envoyé',    value: 'sent',    displayOrder: 1 },
+        { label: 'Ouvert',    value: 'opened',  displayOrder: 2 },
+        { label: 'Cliqué',    value: 'clicked', displayOrder: 3 },
+        { label: 'Répondu',   value: 'replied', displayOrder: 4 },
+        { label: 'Bounce',    value: 'bounced', displayOrder: 5 },
+        { label: 'Opt-out',   value: 'optout',  displayOrder: 6 },
+      ],
+    },
+  ]
+  // Créer le groupe si absent
+  const gr = await request('/crm/v3/properties/contacts/groups', {
+    method: 'POST',
+    body: { name: GROUP, label: 'SCOUT — Suivi emails' },
+  })
+  if (!gr.ok && gr.status !== 409) {
+    console.warn(`[SCOUT] groupe propriétés : HTTP ${gr.status}`)
+  }
+  const results = []
+  for (const p of props) {
+    const r = await request('/crm/v3/properties/contacts', {
+      method: 'POST',
+      body: { ...p, groupName: GROUP },
+    })
+    results.push({ name: p.name, ok: r.ok, status: r.status, error: r.data?.message })
+  }
+  return results
 }

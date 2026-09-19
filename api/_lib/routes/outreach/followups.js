@@ -10,6 +10,7 @@
 import { setCors, requireAccess, isCronRequest, publicOrigin, sendingWindow } from '../../access.js'
 import { reportConfig, isDryRun, logDryRun } from '../../config.js'
 import { googleConfig, gmailAccount, sendGmail, threadReplies } from '../../google.js'
+import { createTask } from '../../hubspot-scout.js'
 import { commsEnabled, checkSubscription, DEFAULT_AUDIENCE } from '../../hubspot-comms.js'
 import { moveDealToStage } from '../../hubspot-scout.js'
 import { writeCampaignProps } from '../../hubspot-campaign.js'

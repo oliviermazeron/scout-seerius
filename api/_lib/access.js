@@ -48,6 +48,32 @@ export function checkEmailToken(email, token) {
   try { return safeEqual(emailToken(email), token ?? '') } catch { return false }
 }
 
+// ─── Jetons de suivi (pixel ouverture + réécriture des liens) ────────────────
+// Payload : { e: email, t: 'o'|'c', u?: url, ts: sentAt_ms }
+// Format  : base64url(JSON(payload)).<hmac_32chars>
+// Secret  : TRACKING_SECRET (distinct de OUTREACH_SECRET)
+export function trackingToken(payload) {
+  const secret = process.env.TRACKING_SECRET
+  if (!secret) throw new Error('TRACKING_SECRET non configuré')
+  const data = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const sig = createHmac('sha256', secret).update(data).digest('base64url').slice(0, 32)
+  return `${data}.${sig}`
+}
+
+export function verifyTrackingToken(token) {
+  try {
+    const dot = String(token ?? '').lastIndexOf('.')
+    if (dot < 1) return null
+    const data = token.slice(0, dot)
+    const sig  = token.slice(dot + 1)
+    const secret = process.env.TRACKING_SECRET
+    if (!secret) return null
+    const expected = createHmac('sha256', secret).update(data).digest('base64url').slice(0, 32)
+    if (!safeEqual(sig, expected)) return null
+    return JSON.parse(Buffer.from(data, 'base64url').toString('utf8'))
+  } catch { return null }
+}
+
 export function publicOrigin(req) {
   if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, '')
   const proto = req.headers?.['x-forwarded-proto'] ?? 'http'

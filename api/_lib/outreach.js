@@ -3,7 +3,7 @@
 // lisible par l'app via /api/store, modifiable uniquement par le serveur.
 
 import { redis, redisOne, hgetJSON, hsetJSON, hgetallJSON } from './redis.js'
-import { emailToken } from './access.js'
+import { emailToken, trackingToken } from './access.js'
 import { isDryRun, logDryRun } from './config.js'
 import { commsEnabled, unsubscribe, DEFAULT_AUDIENCE } from './hubspot-comms.js'
 import { logEmail, markDoNotEmail } from './hubspot-scout.js'
@@ -65,12 +65,31 @@ function textToHtmlParagraphs(text) {
   }).join('\n')
 }
 
-export function buildHtmlBody(text, origin, email, audience = DEFAULT_AUDIENCE) {
+// ─── Réécriture des liens pour le suivi des clics ────────────────────────────
+// Remplace tous les href="http(s)://..." par une URL de tracking.
+// mailto:, tel: et les ancres internes sont laissés intacts.
+// Si TRACKING_SECRET est absent, retourne le HTML inchangé.
+export function rewriteLinksForTracking(html, origin, recipientEmail, sentAt) {
+  if (!process.env.TRACKING_SECRET) return html
+  return html.replace(
+    /(<a\s[^>]*href=")((https?):\/\/[^"]+)(")/gi,
+    (match, pre, url, _proto, post) => {
+      try {
+        const token = trackingToken({ e: recipientEmail, t: 'c', u: url, ts: sentAt })
+        return `${pre}${origin}/api/t/c/${encodeURIComponent(token)}${post}`
+      } catch { return match }
+    },
+  )
+}
+
+export function buildHtmlBody(text, origin, email, audience = DEFAULT_AUDIENCE, trackingOpts = {}) {
   const audienceParam = audience === DEFAULT_AUDIENCE ? '' : `&a=${encodeURIComponent(audience)}`
   const url = `${origin}/api/outreach/unsubscribe?e=${encodeURIComponent(email)}${audienceParam}&t=${emailToken(unsubscribeSubject(email, audience))}`
   const unsubHtml = `<p style="font-family:Helvetica,Arial,sans-serif;font-size:11px;line-height:17px;color:#9C9C9C;margin:16px 0 0 0;">Si vous ne souhaitez plus recevoir de message de ma part, répondez simplement « stop » ou <a href="${url}" style="color:#9C9C9C;">cliquez ici</a>.</p>`
 
-  return `<!DOCTYPE html>
+  const sentAt = trackingOpts.sentAt ?? Date.now()
+
+  let body = `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#ffffff;">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
@@ -81,8 +100,20 @@ ${textToHtmlParagraphs(text)}
 ${signatureHtml()}
 ${unsubHtml}
 </td></tr>
-</table>
-</body></html>`
+</table>`
+
+  // Pixel de suivi des ouvertures — injecté juste avant </body>
+  if (process.env.TRACKING_SECRET) {
+    try {
+      const token = trackingToken({ e: email, t: 'o', ts: sentAt })
+      body += `\n<img src="${origin}/api/t/o/${encodeURIComponent(token)}.gif" width="1" height="1" alt="" style="display:none;" />`
+    } catch {}
+  }
+
+  body += '\n</body></html>'
+
+  // Réécriture des liens après construction du corps complet
+  return rewriteLinksForTracking(body, origin, email, sentAt)
 }
 
 // ─── Désinscriptions ──────────────────────────────────────────────────────────
@@ -176,15 +207,16 @@ export async function logToHubSpot(email, gmailId) {
   try {
     const aud = record.audience ?? DEFAULT_AUDIENCE
     const fullText = withUnsubscribe(entry.body, entry.origin, key, aud)
-    const fullHtml = buildHtmlBody(entry.body, entry.origin, key, aud)
+    const fullHtml = buildHtmlBody(entry.body, entry.origin, key, aud, { sentAt: entry.timestamp })
     const r = await logEmail({
-      contactId: record.contactId,
-      subject: entry.subject,
-      text: fullText,
-      html: fullHtml,
-      from: record.from,
-      to: key,
-      timestamp: entry.timestamp,
+      contactId:  record.contactId,
+      companyId:  record.companyId ?? null,
+      subject:    entry.subject,
+      text:       fullText,
+      html:       fullHtml,
+      from:       record.from,
+      to:         key,
+      timestamp:  entry.timestamp,
     })
     return update(r.ok ? { state: 'logged', hubspotId: r.id, error: null } : { state: 'failed', error: r.error })
   } catch (err) {

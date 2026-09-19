@@ -2,10 +2,12 @@
   "rewrites": [
     { "source": "/api/gmail/:action", "destination": "/api/gmail?action=:action" },
     { "source": "/api/outreach/:action", "destination": "/api/outreach?action=:action" },
-{ "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/api/t/:type/:token", "destination": "/api/outreach?action=track&type=:type&token=:token" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "crons": [
-    { "path": "/api/outreach/followups", "schedule": "0 7 * * 1-5" }
+    { "path": "/api/outreach/followups", "schedule": "0 7 * * 1-5" },
+    { "path": "/api/outreach/replies",   "schedule": "0 * * * *" }
   ],
   "functions": {
     "api/outreach.js": { "maxDuration": 60 }
